@@ -2,16 +2,16 @@
 
 Native Rust rich text editor (WYSIWYG) framework for Leptos and Dioxus, in the same `taino-*` family as the author's prior `taino-dnd-*` contributions.
 
-**Read [DESIGN_NOTES.md](DESIGN_NOTES.md) first.** It contains the full architecture, scope decisions, LOC budget, naming rationale, and open questions that came out of the design conversation. This file is just the entry-point pointer.
+**Read [DESIGN_NOTES.md](DESIGN_NOTES.md) and [ROADMAP.md](ROADMAP.md) first.** DESIGN_NOTES contains the architecture, scope budget, and resolved design decisions. ROADMAP contains the phased v0.1 plan, current status, and contribution surfaces. This file is just the entry-point pointer.
 
 ## Project status
 
-Pre-implementation. No code yet. The next step after design is deciding the open questions in §6 of DESIGN_NOTES.md (which framework adapter ships first, document model style, schema DSL, etc.) and then scaffolding the workspace.
+Pre-implementation. All design decisions in DESIGN_NOTES §6 are resolved. Next step: **Phase 0** in [ROADMAP.md](ROADMAP.md) — workspace scaffold and CI baseline.
 
 ## Author context
 
 - This is the author's **second and final planned contribution** to the Rust ecosystem for the time being (after `taino-dnd-*`). Scope discipline is therefore important — see DESIGN_NOTES §3 for the deliberately narrow v0.1 cut.
-- Author works on Windows (Windows 11, bash + PowerShell available). Repo lives at `c:\JM\PROGRAMMING\taino-edit`.
+- Author works on **WSL Ubuntu on Windows 11**. Rust toolchain and git are installed inside WSL. The repo lives at `~/projects/taino-edit` (WSL native filesystem, accessible from Windows as `\\wsl.localhost\Ubuntu\home\juanma\projects\taino-edit`). All `cargo`, `git`, and toolchain commands should be run from WSL.
 
 ## Working agreements
 
