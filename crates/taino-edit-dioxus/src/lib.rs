@@ -1,0 +1,8 @@
+#![doc = "Reserved for v0.2 — the Dioxus adapter for taino-edit."]
+#![doc = ""]
+#![doc = "This crate is an intentional placeholder so the name is reserved on"]
+#![doc = "crates.io and the workspace shape is final. The Dioxus reactivity"]
+#![doc = "bridge ships in v0.2 on top of the same `taino-edit-dom` layer."]
+#![doc = "See `ROADMAP.md` (Deferred → v0.2+)."]
+#![deny(unsafe_code)]
+#![forbid(unstable_features)]

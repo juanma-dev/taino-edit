@@ -1,0 +1,14 @@
+[package]
+name = "taino-edit-dioxus"
+description = "Dioxus adapter for taino-edit. Reserved for v0.2 — placeholder crate, no functionality yet."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]

@@ -1,0 +1,19 @@
+[package]
+name = "taino-edit-core"
+description = "Framework-agnostic document model, transforms, state, history and commands for the taino-edit WYSIWYG editor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+
+[features]
+default = []
+# Reserved: opt-in CRDT/collaborative support (loro). Not wired in v0.1 — see DESIGN_NOTES §6.
+collab = []

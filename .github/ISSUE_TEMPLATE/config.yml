@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/juanma-dev/taino-edit/blob/main/CONTRIBUTING.md
+    about: Build/test commands, commit and PR conventions, scope rules.
+  - name: Code of Conduct
+    url: https://www.rust-lang.org/policies/code-of-conduct
+    about: This project follows the Rust Code of Conduct.

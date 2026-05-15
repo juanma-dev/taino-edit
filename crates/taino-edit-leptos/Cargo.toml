@@ -1,0 +1,18 @@
+[package]
+name = "taino-edit-leptos"
+description = "Leptos adapter for taino-edit, the native-Rust WYSIWYG rich-text editor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+leptos = "0.8.3"
+taino-edit-core = { workspace = true }
+taino-edit-dom = { workspace = true }
+# `leptos` is added (version-pinned) during scaffold — see DESIGN_NOTES §7.

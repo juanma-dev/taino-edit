@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+authors = ["Juanma <johnimmanuelx@gmail.com>"]
+repository = "https://github.com/juanma-dev/taino-edit"
+homepage = "https://github.com/juanma-dev/taino-edit"
+keywords = ["editor", "wysiwyg", "rich-text", "leptos", "prosemirror"]
+categories = ["web-programming", "gui", "wasm"]
+
+[workspace.dependencies]
+taino-edit-core = { version = "0.1.0", path = "crates/taino-edit-core" }
+taino-edit-dom = { version = "0.1.0", path = "crates/taino-edit-dom" }
+taino-edit-extensions = { version = "0.1.0", path = "crates/taino-edit-extensions" }
+taino-edit-leptos = { version = "0.1.0", path = "crates/taino-edit-leptos" }
+taino-edit-dioxus = { version = "0.1.0", path = "crates/taino-edit-dioxus" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 0 — Pre-implementation (design complete, scaffold next)  |
+| **Current phase**            | 1 — Core: document model (Phase 0 scaffold complete)     |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -39,14 +39,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ Crate naming — `taino-edit` family of 6 crates
 - ✅ All design decisions in [DESIGN_NOTES §6](DESIGN_NOTES.md#6-resolved-decisions-2026-05-15) resolved
 - ✅ Locked technical choices: MSRV, Leptos pinning strategy, CI matrix, license
+- ✅ **Phase 0 — Workspace scaffold and CI baseline** (2026-05-15): six crates build/`fmt`/`clippy`/`test`/`doc` green; `cargo package --workspace` verifies all six; Leptos pinned at `0.8`, `web-sys`/`js-sys` `0.3`, `wasm-bindgen` `0.2`
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 0 begins on next session)*
+- 🚧 *(nothing yet — Phase 1 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 0 — Workspace scaffold and CI baseline** (target: 1 week)
+- ⏳ **Phase 1 — Core: document model** (target: 2–3 weeks)
 
 ---
 
@@ -58,29 +59,35 @@ Phases are sequential. Each ends in a state where `cargo check`, `cargo test`, `
 **Goal:** six crates compile, CI green, repository is contribution-ready.
 **Effort:** ~1 week.
 **Definition of done:** `cargo publish --dry-run` succeeds for every crate.
+✅ Met via `cargo package --workspace` (all six `.crate`s build + verify).
+Note: per-crate `cargo publish --dry-run` only passes for the dep-free crates
+(`core`, `dioxus`); the others can't resolve unpublished workspace siblings
+against crates.io until Phase 7's ordered publish — a known cargo limitation,
+not a scaffold defect. `cargo package --workspace` is the correct pre-publish
+gate and it is green.
 
-- [ ] Initialize `git` repo, `.gitignore` for Rust + WASM artifacts
-- [ ] `rust-toolchain.toml` pinning channel `stable` and MSRV `1.80`
-- [ ] Top-level `Cargo.toml` workspace listing `crates/*`
-- [ ] Create six crate skeletons under `crates/`:
-  - [ ] `taino-edit-core` — `#![no_std]`-friendly where reasonable, zero web deps
-  - [ ] `taino-edit-dom` — `web-sys`, `wasm-bindgen`, `js-sys`
-  - [ ] `taino-edit-extensions` — depends on `core`
-  - [ ] `taino-edit-leptos` — depends on `core` + `dom` + `leptos`
-  - [ ] `taino-edit-dioxus` — empty placeholder, `#![doc = "Reserved for v0.2"]`
-  - [ ] `taino-edit` — umbrella crate, re-exports gated by features (`leptos`, `dioxus`, `dom`)
-- [ ] `LICENSE-MIT` + `LICENSE-APACHE` at repo root; `license = "MIT OR Apache-2.0"` and `repository`, `documentation`, `keywords`, `categories` in every `Cargo.toml`
-- [ ] `README.md` — pitch, status warning, install snippet, links to design docs
-- [ ] `CONTRIBUTING.md` — build/test commands, PR conventions, code-of-conduct link
-- [ ] `CHANGELOG.md` — Keep-a-Changelog format with `## [Unreleased]`
-- [ ] `.github/workflows/ci.yml` running on push and PR:
-  - [ ] `cargo fmt --all -- --check`
-  - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
-  - [ ] `cargo test --all-features`
-  - [ ] `cargo doc --no-deps --all-features`
-- [ ] `.github/dependabot.yml` for monthly cargo and actions updates
-- [ ] Issue templates: bug, feature, RFC
-- [ ] `deny.toml` for `cargo-deny` (advisories, licenses, bans)
+- [x] Initialize `git` repo, `.gitignore` for Rust + WASM artifacts
+- [x] `rust-toolchain.toml` pinning channel `stable` and MSRV `1.80`
+- [x] Top-level `Cargo.toml` workspace listing `crates/*`
+- [x] Create six crate skeletons under `crates/`:
+  - [x] `taino-edit-core` — `#![no_std]`-friendly where reasonable, zero web deps
+  - [x] `taino-edit-dom` — `web-sys`, `wasm-bindgen`, `js-sys`
+  - [x] `taino-edit-extensions` — depends on `core`
+  - [x] `taino-edit-leptos` — depends on `core` + `dom` + `leptos`
+  - [x] `taino-edit-dioxus` — empty placeholder, `#![doc = "Reserved for v0.2"]`
+  - [x] `taino-edit` — umbrella crate, re-exports gated by features (`leptos`, `dioxus`, `dom`)
+- [x] `LICENSE-MIT` + `LICENSE-APACHE` at repo root; `license = "MIT OR Apache-2.0"` and `repository`, `keywords`, `categories` in every `Cargo.toml` (via `[workspace.package]` inheritance). `documentation` deliberately **omitted** — one inherited URL would be wrong for every sub-crate; crates.io auto-links the correct per-crate docs.rs page
+- [x] `README.md` — pitch, status warning, install snippet, links to design docs
+- [x] `CONTRIBUTING.md` — build/test commands, PR conventions, code-of-conduct link
+- [x] `CHANGELOG.md` — Keep-a-Changelog format with `## [Unreleased]`
+- [x] `.github/workflows/ci.yml` running on push and PR:
+  - [x] `cargo fmt --all -- --check`
+  - [x] `cargo clippy --all-targets --all-features -- -D warnings`
+  - [x] `cargo test --all-features`
+  - [x] `cargo doc --no-deps --all-features`
+- [x] `.github/dependabot.yml` for monthly cargo and actions updates
+- [x] Issue templates: bug, feature, RFC
+- [x] `deny.toml` for `cargo-deny` (advisories, licenses, bans)
 
 ### Phase 1 — Core: document model
 **Goal:** a typed, traversable, serializable document tree.
