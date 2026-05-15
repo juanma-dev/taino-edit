@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/target/
+**/*.rs.bk
+
+# Backups / swap
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# WASM / web
+/dist/
+/pkg/
+node_modules/
+
+# Env
+.env
+.env.local
