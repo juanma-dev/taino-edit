@@ -1490,6 +1490,10 @@ dependencies = [
 [[package]]
 name = "taino-edit-core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "taino-edit-dioxus"

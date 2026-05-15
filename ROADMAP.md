@@ -43,11 +43,11 @@ This document is the single source of truth for **what has been done, what is in
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 1 begins next session)*
+- 🚧 **Phase 1 — Core: document model** — model, schema, content automaton, JSON round-trip and `ResolvedPos` landed and tested; HTML serializer/parser remain
 
 ### Up next
 
-- ⏳ **Phase 1 — Core: document model** (target: 2–3 weeks)
+- ⏳ Finish Phase 1 (HTML serializer + strict HTML parser), then **Phase 2 — Core: transforms, state, history**
 
 ---
 
@@ -94,18 +94,18 @@ gate and it is green.
 **Effort:** 2–3 weeks. Estimated LOC: ~1.5–2k.
 **Definition of done:** schema-validated documents round-trip through JSON without loss; unit tests cover traversal edge cases.
 
-- [ ] `Node` — element with type, attributes, content (`Fragment`), marks
-- [ ] `Mark` — inline annotation with type and attributes
-- [ ] `Fragment` — ordered, immutable sequence of `Node`s
-- [ ] `Slice` — fragment with open depths for cut-paste boundaries
-- [ ] `NodeType`, `MarkType` — schema-bound type descriptors
-- [ ] `Schema` + `SchemaBuilder` — the builder API (no macro yet)
-- [ ] Content expressions — minimal regex-like grammar for valid children (`"paragraph+"`, `"(text | image)*"`)
-- [ ] `Pos` (absolute) and `ResolvedPos` (path + parent context)
-- [ ] `serde::Serialize`/`Deserialize` for documents → JSON
+- [x] `Node` — element with type, attributes, content (`Fragment`), marks
+- [x] `Mark` — inline annotation with type and attributes
+- [x] `Fragment` — ordered, immutable sequence of `Node`s
+- [x] `Slice` — fragment with open depths for cut-paste boundaries
+- [x] `NodeType`, `MarkType` — schema-bound type descriptors
+- [x] `Schema` + `SchemaBuilder` — the builder API (no macro yet)
+- [x] Content expressions — minimal regex-like grammar for valid children (`"paragraph+"`, `"(text | image)*"`) — Thompson NFA → DFA, ProseMirror-compatible
+- [x] `Pos` (absolute) and `ResolvedPos` (path + parent context)
+- [x] `serde::Serialize`/`Deserialize` for documents → JSON (schema-checked, round-trips without loss)
 - [ ] HTML serializer (one-way: doc → HTML string)
 - [ ] HTML parser (HTML string → doc), strict against schema
-- [ ] Snapshot tests for all of the above
+- [x] Snapshot tests for all of the above — JSON-round-trip + traversal acceptance tests in `tests/model.rs`; HTML cases pending the two items above
 
 ### Phase 2 — Core: transforms, state, history
 **Goal:** mutate documents through validated, invertible steps; persist editor state and selection.
