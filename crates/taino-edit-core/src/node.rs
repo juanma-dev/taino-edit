@@ -251,7 +251,6 @@ impl Node {
 
     /// Attributes (mutable-copy helper for `AttrStep`): return a copy with
     /// `attrs` replacing the current attribute map.
-    #[allow(dead_code)] // consumed by AttrStep, landing later this phase
     pub(crate) fn with_attrs(&self, attrs: Attrs) -> Node {
         let inner = &*self.0;
         Node(Arc::new(NodeInner {
@@ -261,6 +260,23 @@ impl Node {
             marks: inner.marks.clone(),
             text: inner.text.clone(),
         }))
+    }
+
+    /// The node that begins at absolute position `pos` within this node's
+    /// subtree (descending into children), or `None` if `pos` does not land
+    /// exactly on a node boundary.
+    pub fn node_at(&self, pos: usize) -> Option<Node> {
+        let mut node = self.clone();
+        let mut pos = pos;
+        loop {
+            let (index, offset) = node.0.content.find_index(pos);
+            let child = node.0.content.children().get(index)?.clone();
+            if offset == pos || child.is_text() {
+                return Some(child);
+            }
+            pos -= offset + 1;
+            node = child;
+        }
     }
 
     /// Slice this node's content (text for text nodes) between content

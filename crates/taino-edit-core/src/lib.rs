@@ -57,4 +57,6 @@ pub use pos::ResolvedPos;
 pub use replace::ReplaceError;
 pub use schema::{AttrSpec, MarkSpec, NodeSpec, Schema, SchemaBuilder};
 pub use slice::Slice;
-pub use step::{step_from_json, ReplaceStep, Step, StepError};
+pub use step::{
+    step_from_json, AddMarkStep, AttrStep, RemoveMarkStep, ReplaceStep, Step, StepError,
+};
