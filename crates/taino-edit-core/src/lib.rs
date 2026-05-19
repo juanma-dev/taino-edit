@@ -31,6 +31,7 @@
 #![warn(missing_docs, rust_2018_idioms)]
 
 mod attrs;
+mod commands;
 mod content;
 mod error;
 mod fragment;
@@ -49,6 +50,9 @@ mod step;
 mod transform;
 
 pub use attrs::{AttrValue, Attrs};
+pub use commands::{
+    chain, delete_selection, remove_mark, select_all, set_mark, toggle_mark, Command, Dispatch,
+};
 pub use content::ContentMatch;
 pub use error::{DocError, SchemaError};
 pub use fragment::Fragment;
