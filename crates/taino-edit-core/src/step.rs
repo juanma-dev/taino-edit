@@ -48,6 +48,15 @@ pub trait Step: fmt::Debug {
 
     /// Serialize to JSON (tagged with `stepType`).
     fn to_json(&self) -> Value;
+
+    /// Clone into a new boxed step (steps are stored in undo history).
+    fn clone_box(&self) -> Box<dyn Step>;
+}
+
+impl Clone for Box<dyn Step> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
 }
 
 fn slice_to_json(slice: &Slice) -> Value {
@@ -144,6 +153,10 @@ impl Step for ReplaceStep {
             "slice": slice_to_json(&self.slice),
         })
     }
+
+    fn clone_box(&self) -> Box<dyn Step> {
+        Box::new(self.clone())
+    }
 }
 
 fn map_inline(frag: &Fragment, f: &dyn Fn(&Node) -> Node) -> Fragment {
@@ -221,6 +234,10 @@ impl Step for AddMarkStep {
             "to": self.to,
         })
     }
+
+    fn clone_box(&self) -> Box<dyn Step> {
+        Box::new(self.clone())
+    }
 }
 
 /// Remove `mark` from every inline node in `from..to`.
@@ -284,6 +301,10 @@ impl Step for RemoveMarkStep {
             "from": self.from,
             "to": self.to,
         })
+    }
+
+    fn clone_box(&self) -> Box<dyn Step> {
+        Box::new(self.clone())
     }
 }
 
@@ -365,6 +386,10 @@ impl Step for AttrStep {
             "attr": self.attr,
             "value": self.value,
         })
+    }
+
+    fn clone_box(&self) -> Box<dyn Step> {
+        Box::new(self.clone())
     }
 }
 

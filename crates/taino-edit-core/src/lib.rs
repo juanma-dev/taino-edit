@@ -42,8 +42,11 @@ mod node;
 mod pos;
 mod replace;
 mod schema;
+mod selection;
 mod slice;
+mod state;
 mod step;
+mod transform;
 
 pub use attrs::{AttrValue, Attrs};
 pub use content::ContentMatch;
@@ -56,7 +59,10 @@ pub use node::{Node, NodeType};
 pub use pos::ResolvedPos;
 pub use replace::ReplaceError;
 pub use schema::{AttrSpec, MarkSpec, NodeSpec, Schema, SchemaBuilder};
+pub use selection::Selection;
 pub use slice::Slice;
+pub use state::{EditorState, History, Transaction};
 pub use step::{
     step_from_json, AddMarkStep, AttrStep, RemoveMarkStep, ReplaceStep, Step, StepError,
 };
+pub use transform::Transform;
