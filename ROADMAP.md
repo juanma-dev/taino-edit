@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 3 — Core: commands, keymap, input rules (Phase 2 done)   |
+| **Current phase**            | 4 — `taino-edit-dom` contenteditable bridge (Phase 3 done) |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -42,14 +42,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 0 — Workspace scaffold and CI baseline** (2026-05-15): six crates build/`fmt`/`clippy`/`test`/`doc` green; `cargo package --workspace` verifies all six; Leptos pinned at `0.8`, `web-sys`/`js-sys` `0.3`, `wasm-bindgen` `0.2`
 - ✅ **Phase 1 — Core: document model** (2026-05-19): typed tree (Node/Mark/Fragment/Slice), schema + content automaton, `ResolvedPos`, schema-checked JSON round-trip, and a dependency-free escaped HTML serializer + strict depth-bounded HTML parser; 14 acceptance tests in `taino-edit-core`
 - ✅ **Phase 2 — Core: transforms, state, history** (2026-05-19): ProseMirror-ported `replace`, all five steps (Replace/ReplaceAround/AddMark/RemoveMark/Attr) with invert+map+JSON, StepMap/Mapping with mirror-recover, `Transform`, `Selection`, `EditorState`/`Transaction`, bounded undo/redo `History`; 29 step/transform/state tests (generic plugin registry deferred to v0.2)
+- ✅ **Phase 3 — Core: commands, keymap, input rules** (2026-05-19): `Command`/`chain`, selection/mark/block/join commands, `Transform::split`, cross-platform `Keymap` + `base_keymap`, regex `InputRules` (`text_replace`/`textblock_type`/`wrapping`); 27 command/keymap/inputrule tests. `taino-edit-core` is feature-complete for v0.1
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 3 begins next session)*
+- 🚧 *(nothing yet — Phase 4 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 3 — Core: commands, keymap, input rules** (target: ~1 week)
+- ⏳ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (target: 2–3 weeks; the riskiest phase)
 
 ---
 
@@ -134,14 +135,14 @@ gate and it is green.
 **Effort:** ~1 week. Estimated LOC: ~1–1.5k.
 **Definition of done:** all baseKeymap commands have tests; toggleMark/setBlockType behave on selections of every shape.
 
-- [ ] `Command` type — `Fn(&EditorState, Option<&mut dyn FnMut(Transaction)>) -> bool`
-- [ ] Selection-level commands: `delete_selection`, `select_all`
-- [ ] Mark commands: `toggle_mark`, `set_mark`, `remove_mark`
-- [ ] Block commands: `set_block_type`, `wrap_in`, `lift`, `split_block`
-- [ ] Join commands: `join_backward`, `join_forward`
-- [ ] `Keymap` plugin with cross-platform modifier handling (Mod = Ctrl on Win/Linux, Cmd on macOS)
-- [ ] `base_keymap` — Enter, Backspace, Delete, arrow keys, Home/End
-- [ ] `InputRules` plugin — regex-triggered transforms (e.g., `## ` → heading)
+- [x] `Command` type — `Fn(&EditorState, Option<&mut Dispatch>) -> bool` + `chain`
+- [x] Selection-level commands: `delete_selection`, `select_all`
+- [x] Mark commands: `toggle_mark`, `set_mark`, `remove_mark`
+- [x] Block commands: `set_block_type`, `wrap_in`, `lift`, `split_block` (+ `Transform::split`)
+- [x] Join commands: `join_backward`, `join_forward`
+- [x] `Keymap` with cross-platform modifier handling (Mod = Ctrl on Win/Linux, Cmd on macOS)
+- [x] `base_keymap` — Enter, Backspace, Delete, arrows, Home/End (+ `delete_backward`/`forward`, caret motion)
+- [x] `InputRules` — regex-triggered transforms: `text_replace_rule`, `textblock_type_rule` (`## ` → heading), `wrapping_rule` (`> ` → blockquote)
 
 ### Phase 4 — `taino-edit-dom`: the contenteditable bridge
 **Goal:** render `EditorState` to the DOM, observe user edits, sync selection.

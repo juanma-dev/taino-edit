@@ -38,5 +38,13 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - `Transform` (step + mapping accumulator with editing helpers).
   - `Selection` (`Text`/`Node`/`All`), `EditorState`, `Transaction`,
     and a bounded, groupable undo/redo `History`.
+- Phase 3 — `taino-edit-core` commands, keymap and input rules:
+  - `Command` contract + `chain`; selection, mark, block and join
+    commands; `Transform::split`.
+  - Cross-platform `Keymap` (`Mod` = Ctrl/Cmd) and `base_keymap`
+    (Enter/Backspace/Delete chains, `Mod-a`, caret motion).
+  - Regex `InputRules`: `text_replace_rule`, `textblock_type_rule`
+    (`## ` → heading), `wrapping_rule` (`> ` → blockquote).
+  - `taino-edit-core` is now feature-complete for the v0.1 milestone.
 
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main

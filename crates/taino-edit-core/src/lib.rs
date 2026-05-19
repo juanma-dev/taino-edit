@@ -36,6 +36,7 @@ mod content;
 mod error;
 mod fragment;
 mod html;
+mod inputrules;
 mod json;
 mod keymap;
 mod map;
@@ -60,11 +61,16 @@ pub use content::ContentMatch;
 pub use error::{DocError, SchemaError};
 pub use fragment::Fragment;
 pub use html::{DomSpec, HtmlElement, ParseRule, MAX_DEPTH};
+pub use inputrules::{
+    text_replace_rule, textblock_type_rule, wrapping_rule, InputRule, InputRules,
+};
 pub use keymap::{base_keymap, KeyPress, Keymap};
 pub use map::{MapResult, Mapping, StepMap, DEL_SIDE};
 pub use mark::{same_mark_set, Mark, MarkType};
 pub use node::{Node, NodeType};
 pub use pos::ResolvedPos;
+#[doc(no_inline)]
+pub use regex::Captures;
 pub use replace::ReplaceError;
 pub use schema::{AttrSpec, MarkSpec, NodeSpec, Schema, SchemaBuilder};
 pub use selection::Selection;
