@@ -140,4 +140,51 @@ impl ResolvedPos {
     pub fn text_offset(&self) -> usize {
         self.pos - self.path[self.depth()].start
     }
+
+    /// The deepest depth at which this position and `pos` lie in the same
+    /// ancestor node.
+    pub fn shared_depth(&self, pos: usize) -> usize {
+        let mut depth = self.depth();
+        while depth > 0 {
+            if self.start(depth) <= pos && self.end(depth) >= pos {
+                return depth;
+            }
+            depth -= 1;
+        }
+        0
+    }
+
+    /// The node directly after this position within its parent, or `None` at
+    /// the end of the parent. When the position is inside a text run, the
+    /// returned node is the remaining tail of that run.
+    pub fn node_after(&self) -> Option<Node> {
+        let parent = self.parent();
+        let index = self.index(self.depth());
+        if index == parent.child_count() {
+            return None;
+        }
+        let d_off = self.text_offset();
+        let child = parent.child(index);
+        if d_off > 0 {
+            Some(child.cut(d_off, child.node_size()))
+        } else {
+            Some(child.clone())
+        }
+    }
+
+    /// The node directly before this position within its parent, or `None`
+    /// at the start. When inside a text run, the returned node is the leading
+    /// head of that run.
+    pub fn node_before(&self) -> Option<Node> {
+        let index = self.index(self.depth());
+        let d_off = self.text_offset();
+        if d_off > 0 {
+            return Some(self.parent().child(index).cut(0, d_off));
+        }
+        if index == 0 {
+            None
+        } else {
+            Some(self.parent().child(index - 1).clone())
+        }
+    }
 }

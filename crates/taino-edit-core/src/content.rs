@@ -87,6 +87,15 @@ impl ContentMatch {
             None => false,
         }
     }
+
+    /// Whether two content automata share an acceptable first child type —
+    /// the condition under which two nodes may be joined (mirrors
+    /// ProseMirror's `ContentMatch.compatible`).
+    pub fn compatible(&self, other: &ContentMatch) -> bool {
+        let a = &self.automaton.states[self.state].next;
+        let b = &other.automaton.states[other.state].next;
+        a.iter().any(|x| b.iter().any(|y| x.type_id == y.type_id))
+    }
 }
 
 // ---- expression AST -------------------------------------------------------

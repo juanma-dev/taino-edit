@@ -219,6 +219,66 @@ impl Node {
             text: inner.text.clone(),
         }))
     }
+
+    /// Return a copy of this node with the same type/attrs/marks but the
+    /// given content. Not schema-validated — callers that need validation
+    /// (e.g. the replace algorithm) check separately.
+    pub(crate) fn copy_content(&self, content: Fragment) -> Node {
+        debug_assert!(self.0.text.is_none(), "copy_content on a text node");
+        let inner = &*self.0;
+        Node(Arc::new(NodeInner {
+            type_: inner.type_.clone(),
+            attrs: inner.attrs.clone(),
+            content,
+            marks: inner.marks.clone(),
+            text: None,
+        }))
+    }
+
+    /// Return a copy of this text node carrying `text`.
+    pub(crate) fn with_text(&self, text: String) -> Node {
+        debug_assert!(self.0.text.is_some(), "with_text on a non-text node");
+        Node::new_text(self.0.type_.clone(), text, self.0.marks.clone())
+    }
+
+    /// Whether two nodes have the same type, attributes and marks (text
+    /// equality aside) — i.e. adjacent text runs can be merged.
+    pub(crate) fn same_markup(&self, other: &Node) -> bool {
+        self.0.type_ == other.0.type_
+            && self.0.attrs == other.0.attrs
+            && self.0.marks == other.0.marks
+    }
+
+    /// Attributes (mutable-copy helper for `AttrStep`): return a copy with
+    /// `attrs` replacing the current attribute map.
+    #[allow(dead_code)] // consumed by AttrStep, landing later this phase
+    pub(crate) fn with_attrs(&self, attrs: Attrs) -> Node {
+        let inner = &*self.0;
+        Node(Arc::new(NodeInner {
+            type_: inner.type_.clone(),
+            attrs,
+            content: inner.content.clone(),
+            marks: inner.marks.clone(),
+            text: inner.text.clone(),
+        }))
+    }
+
+    /// Slice this node's content (text for text nodes) between content
+    /// positions `from..to`, returning a same-markup copy.
+    pub(crate) fn cut(&self, from: usize, to: usize) -> Node {
+        if let Some(t) = &self.0.text {
+            let chars: Vec<char> = t.chars().collect();
+            let to = to.min(chars.len());
+            if from == 0 && to == chars.len() {
+                return self.clone();
+            }
+            return self.with_text(chars[from..to].iter().collect());
+        }
+        if from == 0 && to == self.0.content.size() {
+            return self.clone();
+        }
+        self.copy_content(self.0.content.cut(from, to))
+    }
 }
 
 impl PartialEq for Node {

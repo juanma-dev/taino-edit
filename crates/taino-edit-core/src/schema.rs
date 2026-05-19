@@ -11,6 +11,7 @@ use std::sync::Arc;
 use crate::attrs::{AttrValue, Attrs};
 use crate::content::{compile_content, ContentMatch};
 use crate::error::{DocError, SchemaError};
+use crate::fragment::Fragment;
 use crate::html::{DomSpec, ParseRule};
 use crate::mark::{Mark, MarkType, MarkTypeInner};
 use crate::node::{Node, NodeType, NodeTypeInner};
@@ -235,6 +236,21 @@ impl Schema {
 
     pub(crate) fn content_match(&self, type_id: usize) -> &ContentMatch {
         &self.0.content_matches[type_id]
+    }
+
+    /// Whether a node of type `sub` may be joined onto one of type `main`
+    /// (used by the replace algorithm). Same type, or sharing an acceptable
+    /// first child type.
+    pub(crate) fn types_compatible(&self, sub: &NodeType, main: &NodeType) -> bool {
+        sub == main
+            || self
+                .content_match(sub.id())
+                .compatible(self.content_match(main.id()))
+    }
+
+    /// Whether `frag`'s children satisfy `parent`'s content expression.
+    pub(crate) fn fragment_valid(&self, parent: &NodeType, frag: &Fragment) -> bool {
+        self.content_valid(parent, frag.children())
     }
 
     fn fill_attrs(spec_attrs: &HashMap<String, AttrSpec>, mut given: Attrs) -> Attrs {

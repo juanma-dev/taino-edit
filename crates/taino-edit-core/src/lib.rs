@@ -39,6 +39,7 @@ mod json;
 mod mark;
 mod node;
 mod pos;
+mod replace;
 mod schema;
 mod slice;
 
@@ -50,5 +51,6 @@ pub use html::{DomSpec, HtmlElement, ParseRule, MAX_DEPTH};
 pub use mark::{same_mark_set, Mark, MarkType};
 pub use node::{Node, NodeType};
 pub use pos::ResolvedPos;
+pub use replace::ReplaceError;
 pub use schema::{AttrSpec, MarkSpec, NodeSpec, Schema, SchemaBuilder};
 pub use slice::Slice;
