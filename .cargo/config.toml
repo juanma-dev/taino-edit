@@ -1,0 +1,4 @@
+# Run wasm32 tests through wasm-bindgen-test-runner (browser/headless).
+# Only affects the wasm32 target; native `cargo test` is unchanged.
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"

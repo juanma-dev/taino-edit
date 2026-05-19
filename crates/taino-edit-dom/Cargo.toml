@@ -15,5 +15,35 @@ categories.workspace = true
 js-sys = "0.3.98"
 taino-edit-core = { workspace = true }
 wasm-bindgen = "0.2.121"
-web-sys = "0.3.98"
-# web-sys / wasm-bindgen / js-sys are added (version-pinned) during scaffold.
+
+[dependencies.web-sys]
+version = "0.3.98"
+features = [
+    "Window",
+    "Document",
+    "DocumentFragment",
+    "Element",
+    "HtmlElement",
+    "HtmlDivElement",
+    "Node",
+    "NodeList",
+    "Text",
+    "CharacterData",
+    "DomTokenList",
+    "NamedNodeMap",
+    "Attr",
+    "Selection",
+    "Range",
+    "DomRect",
+    "Event",
+    "EventTarget",
+    "KeyboardEvent",
+    "InputEvent",
+    "CompositionEvent",
+    "MutationObserver",
+    "MutationObserverInit",
+    "MutationRecord",
+]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.71"

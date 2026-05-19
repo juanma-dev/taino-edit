@@ -24,3 +24,7 @@ node_modules/
 # Env
 .env
 .env.local
+
+# Local browser-test toolchain (not committed)
+/.tools/
+/webdriver.json
