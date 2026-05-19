@@ -18,5 +18,16 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - Dual `MIT OR Apache-2.0` licensing.
   - GitHub Actions CI: `fmt`, `clippy`, `test`, `doc`.
   - Dependabot, issue templates, and `cargo-deny` configuration.
+- Phase 1 — `taino-edit-core` document model:
+  - ProseMirror-style typed tree: `Node`/`NodeType`, `Mark`/`MarkType`
+    (with mark-set operations), `Fragment`, `Slice`.
+  - `Schema` + `SchemaBuilder` with attribute defaults and content
+    validation; content expressions compiled via a Thompson NFA → DFA
+    (`paragraph+`, `(text | image)*`, `+ * ?`).
+  - `ResolvedPos` absolute-position resolution
+    (`depth`/`start`/`end`/`before`/`after`/`text_offset`).
+  - Schema-checked JSON (de)serialization that round-trips without loss.
+  - Dependency-free HTML serializer (escaped output) and a strict,
+    depth-bounded HTML parser validated against the schema.
 
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main

@@ -11,6 +11,7 @@ use std::sync::Arc;
 use crate::attrs::{AttrValue, Attrs};
 use crate::content::{compile_content, ContentMatch};
 use crate::error::{DocError, SchemaError};
+use crate::html::{DomSpec, ParseRule};
 use crate::mark::{Mark, MarkType, MarkTypeInner};
 use crate::node::{Node, NodeType, NodeTypeInner};
 
@@ -41,6 +42,12 @@ pub struct NodeSpec {
     pub atom: bool,
     /// Attribute declarations.
     pub attrs: HashMap<String, AttrSpec>,
+    /// How to render a node of this type to an HTML element. `None` means
+    /// the node is transparent in HTML (only its content is serialized) —
+    /// the usual choice for the top/document node.
+    pub to_dom: Option<fn(&Node) -> DomSpec>,
+    /// Rules mapping HTML elements back to this node type when parsing.
+    pub parse_dom: Vec<ParseRule>,
 }
 
 /// Declaration of a mark type.
@@ -53,6 +60,10 @@ pub struct MarkSpec {
     pub inclusive: bool,
     /// Attribute declarations.
     pub attrs: HashMap<String, AttrSpec>,
+    /// How to render this mark to an HTML element wrapping the marked text.
+    pub to_dom: Option<fn(&Mark) -> DomSpec>,
+    /// Rules mapping HTML elements back to this mark type when parsing.
+    pub parse_dom: Vec<ParseRule>,
 }
 
 /// Builder for a [`Schema`]. Node and mark declaration order is preserved and

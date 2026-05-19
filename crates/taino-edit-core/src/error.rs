@@ -68,6 +68,9 @@ pub enum DocError {
     },
     /// JSON did not match the expected document shape.
     MalformedJson(String),
+    /// HTML input was malformed or exceeded a safety limit (e.g. nesting
+    /// depth).
+    HtmlParse(String),
 }
 
 impl fmt::Display for DocError {
@@ -82,6 +85,7 @@ impl fmt::Display for DocError {
                 write!(f, "position {pos} out of range (max {max})")
             }
             DocError::MalformedJson(m) => write!(f, "malformed document JSON: {m}"),
+            DocError::HtmlParse(m) => write!(f, "could not parse HTML: {m}"),
         }
     }
 }

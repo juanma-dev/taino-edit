@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 1 — Core: document model (Phase 0 scaffold complete)     |
+| **Current phase**            | 2 — Core: transforms, state, history (Phase 1 complete)  |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -40,14 +40,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ All design decisions in [DESIGN_NOTES §6](DESIGN_NOTES.md#6-resolved-decisions-2026-05-15) resolved
 - ✅ Locked technical choices: MSRV, Leptos pinning strategy, CI matrix, license
 - ✅ **Phase 0 — Workspace scaffold and CI baseline** (2026-05-15): six crates build/`fmt`/`clippy`/`test`/`doc` green; `cargo package --workspace` verifies all six; Leptos pinned at `0.8`, `web-sys`/`js-sys` `0.3`, `wasm-bindgen` `0.2`
+- ✅ **Phase 1 — Core: document model** (2026-05-19): typed tree (Node/Mark/Fragment/Slice), schema + content automaton, `ResolvedPos`, schema-checked JSON round-trip, and a dependency-free escaped HTML serializer + strict depth-bounded HTML parser; 14 acceptance tests in `taino-edit-core`
 
 ### In progress
 
-- 🚧 **Phase 1 — Core: document model** — model, schema, content automaton, JSON round-trip and `ResolvedPos` landed and tested; HTML serializer/parser remain
+- 🚧 *(nothing yet — Phase 2 begins next session)*
 
 ### Up next
 
-- ⏳ Finish Phase 1 (HTML serializer + strict HTML parser), then **Phase 2 — Core: transforms, state, history**
+- ⏳ **Phase 2 — Core: transforms, state, history** (target: 2–3 weeks)
 
 ---
 
@@ -103,9 +104,9 @@ gate and it is green.
 - [x] Content expressions — minimal regex-like grammar for valid children (`"paragraph+"`, `"(text | image)*"`) — Thompson NFA → DFA, ProseMirror-compatible
 - [x] `Pos` (absolute) and `ResolvedPos` (path + parent context)
 - [x] `serde::Serialize`/`Deserialize` for documents → JSON (schema-checked, round-trips without loss)
-- [ ] HTML serializer (one-way: doc → HTML string)
-- [ ] HTML parser (HTML string → doc), strict against schema
-- [x] Snapshot tests for all of the above — JSON-round-trip + traversal acceptance tests in `tests/model.rs`; HTML cases pending the two items above
+- [x] HTML serializer (one-way: doc → HTML string) — escaped output, schema-driven `to_dom`
+- [x] HTML parser (HTML string → doc), strict against schema — dependency-free tokenizer, depth-bounded, hostile-input-safe
+- [x] Snapshot tests for all of the above — `tests/model.rs` (JSON round-trip + traversal) and `tests/html.rs` (round-trip, escaping, strictness, hostile input)
 
 ### Phase 2 — Core: transforms, state, history
 **Goal:** mutate documents through validated, invertible steps; persist editor state and selection.
