@@ -269,6 +269,120 @@ pub fn split_block(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> 
     true
 }
 
+/// Delete the character before an empty caret within its textblock.
+pub fn delete_backward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let sel = state.selection();
+    if !sel.is_empty() {
+        return false;
+    }
+    let pos = sel.from();
+    let Ok(rp) = ResolvedPos::resolve(state.doc(), pos) else {
+        return false;
+    };
+    if rp.depth() == 0 || rp.parent_offset() == 0 {
+        return false;
+    }
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        if tx.transform().delete(pos - 1, pos, state.schema()).is_ok() {
+            tx.set_selection(Selection::caret(pos - 1));
+            d(tx);
+        }
+    }
+    true
+}
+
+/// Delete the character after an empty caret within its textblock.
+pub fn delete_forward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let sel = state.selection();
+    if !sel.is_empty() {
+        return false;
+    }
+    let pos = sel.from();
+    let Ok(rp) = ResolvedPos::resolve(state.doc(), pos) else {
+        return false;
+    };
+    if rp.depth() == 0 || rp.parent_offset() == rp.parent().content().size() {
+        return false;
+    }
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        if tx.transform().delete(pos, pos + 1, state.schema()).is_ok() {
+            d(tx);
+        }
+    }
+    true
+}
+
+/// Collapse a range selection, or move an empty caret one position left.
+pub fn caret_left(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let sel = state.selection();
+    let target = if !sel.is_empty() {
+        sel.from()
+    } else if sel.from() > 0 {
+        sel.from() - 1
+    } else {
+        return false;
+    };
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        tx.set_selection(Selection::caret(target));
+        d(tx);
+    }
+    true
+}
+
+/// Collapse a range selection, or move an empty caret one position right.
+pub fn caret_right(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let sel = state.selection();
+    let max = state.doc().content().size();
+    let target = if !sel.is_empty() {
+        sel.to(state.doc())
+    } else if sel.from() < max {
+        sel.from() + 1
+    } else {
+        return false;
+    };
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        tx.set_selection(Selection::caret(target));
+        d(tx);
+    }
+    true
+}
+
+/// Move the caret to the start of its textblock (Home).
+pub fn caret_line_start(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+        return false;
+    };
+    if rp.depth() == 0 {
+        return false;
+    }
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        tx.set_selection(Selection::caret(rp.start(rp.depth())));
+        d(tx);
+    }
+    true
+}
+
+/// Move the caret to the end of its textblock (End).
+pub fn caret_line_end(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
+    let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+        return false;
+    };
+    if rp.depth() == 0 {
+        return false;
+    }
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        tx.set_selection(Selection::caret(rp.end(rp.depth())));
+        d(tx);
+    }
+    true
+}
+
 /// At the start of a block with a preceding sibling, join it onto that
 /// sibling (Backspace at block start).
 pub fn join_backward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {

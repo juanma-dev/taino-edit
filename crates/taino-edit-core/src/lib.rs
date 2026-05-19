@@ -37,6 +37,7 @@ mod error;
 mod fragment;
 mod html;
 mod json;
+mod keymap;
 mod map;
 mod mark;
 mod node;
@@ -51,13 +52,15 @@ mod transform;
 
 pub use attrs::{AttrValue, Attrs};
 pub use commands::{
-    chain, delete_selection, join_backward, join_forward, lift, remove_mark, select_all,
+    caret_left, caret_line_end, caret_line_start, caret_right, chain, delete_backward,
+    delete_forward, delete_selection, join_backward, join_forward, lift, remove_mark, select_all,
     set_block_type, set_mark, split_block, toggle_mark, wrap_in, Command, Dispatch,
 };
 pub use content::ContentMatch;
 pub use error::{DocError, SchemaError};
 pub use fragment::Fragment;
 pub use html::{DomSpec, HtmlElement, ParseRule, MAX_DEPTH};
+pub use keymap::{base_keymap, KeyPress, Keymap};
 pub use map::{MapResult, Mapping, StepMap, DEL_SIDE};
 pub use mark::{same_mark_set, Mark, MarkType};
 pub use node::{Node, NodeType};
