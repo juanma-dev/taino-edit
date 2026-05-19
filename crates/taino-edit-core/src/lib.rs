@@ -51,7 +51,8 @@ mod transform;
 
 pub use attrs::{AttrValue, Attrs};
 pub use commands::{
-    chain, delete_selection, remove_mark, select_all, set_mark, toggle_mark, Command, Dispatch,
+    chain, delete_selection, join_backward, join_forward, lift, remove_mark, select_all,
+    set_block_type, set_mark, split_block, toggle_mark, wrap_in, Command, Dispatch,
 };
 pub use content::ContentMatch;
 pub use error::{DocError, SchemaError};

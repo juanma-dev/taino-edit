@@ -5,9 +5,11 @@
 //! so positions taken before a change can be mapped forward and the whole
 //! transform can be inverted step-by-step (the basis for undo).
 
+use crate::fragment::Fragment;
 use crate::map::Mapping;
 use crate::mark::Mark;
 use crate::node::Node;
+use crate::pos::ResolvedPos;
 use crate::schema::Schema;
 use crate::slice::Slice;
 use crate::step::{AddMarkStep, AttrStep, RemoveMarkStep, ReplaceStep, Step, StepError};
@@ -117,6 +119,20 @@ impl Transform {
         schema: &Schema,
     ) -> Result<&mut Self, StepError> {
         self.step(Box::new(RemoveMarkStep::new(from, to, mark)), schema)
+    }
+
+    /// Split the textblock at `pos` into two blocks of the same type
+    /// (depth-1 split — the common Enter behaviour).
+    pub fn split(&mut self, pos: usize, schema: &Schema) -> Result<&mut Self, StepError> {
+        let rp = ResolvedPos::resolve(self.doc(), pos).map_err(|e| StepError(e.to_string()))?;
+        let depth = rp.depth();
+        if depth == 0 {
+            return Err(StepError("cannot split at the top level".into()));
+        }
+        let block = rp.node(depth).clone();
+        let empty = block.copy_content(Fragment::empty());
+        let content = Fragment::from_node(empty.clone()).append(&Fragment::from_node(empty));
+        self.replace(pos, pos, Slice::new(content, 1, 1), schema)
     }
 
     /// Set attribute `attr` to `value` on the node at `pos`.
