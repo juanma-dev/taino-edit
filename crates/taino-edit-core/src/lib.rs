@@ -63,6 +63,7 @@ pub use selection::Selection;
 pub use slice::Slice;
 pub use state::{EditorState, History, Transaction};
 pub use step::{
-    step_from_json, AddMarkStep, AttrStep, RemoveMarkStep, ReplaceStep, Step, StepError,
+    step_from_json, AddMarkStep, AttrStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Step,
+    StepError,
 };
 pub use transform::Transform;

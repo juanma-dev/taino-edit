@@ -393,6 +393,128 @@ impl Step for AttrStep {
     }
 }
 
+/// Replace `from..to` but keep the content in `gap_from..gap_to`, splicing
+/// it into `slice` at offset `insert`. This is how nodes are wrapped
+/// (e.g. paragraph → blockquote/list item) or unwrapped.
+#[derive(Debug, Clone)]
+pub struct ReplaceAroundStep {
+    from: usize,
+    to: usize,
+    gap_from: usize,
+    gap_to: usize,
+    slice: Slice,
+    insert: usize,
+}
+
+impl ReplaceAroundStep {
+    /// Construct a replace-around step.
+    pub fn new(
+        from: usize,
+        to: usize,
+        gap_from: usize,
+        gap_to: usize,
+        slice: Slice,
+        insert: usize,
+    ) -> Self {
+        ReplaceAroundStep {
+            from,
+            to,
+            gap_from,
+            gap_to,
+            slice,
+            insert,
+        }
+    }
+}
+
+impl Step for ReplaceAroundStep {
+    fn apply(&self, doc: &Node, schema: &Schema) -> Result<Node, StepError> {
+        let gap = doc
+            .slice(self.gap_from, self.gap_to)
+            .map_err(|e| StepError(e.to_string()))?;
+        if gap.open_start() > 0 || gap.open_end() > 0 {
+            return Err(StepError("structure gap can't be inserted".into()));
+        }
+        let inserted = self
+            .slice
+            .insert_at(self.insert, gap.content().clone())
+            .ok_or_else(|| StepError("content does not fit in gap".into()))?;
+        doc.replace(self.from, self.to, &inserted, schema)
+            .map_err(|e| StepError(e.to_string()))
+    }
+
+    fn get_map(&self) -> StepMap {
+        StepMap::new(vec![
+            self.from,
+            self.gap_from - self.from,
+            self.insert,
+            self.gap_to,
+            self.to - self.gap_to,
+            self.slice.size().saturating_sub(self.insert),
+        ])
+    }
+
+    fn invert(&self, doc: &Node) -> Result<Box<dyn Step>, StepError> {
+        let gap = self.gap_to - self.gap_from;
+        let removed = doc
+            .slice(self.from, self.to)
+            .map_err(|e| StepError(e.to_string()))?
+            .remove_between(self.gap_from - self.from, self.gap_to - self.from)
+            .ok_or_else(|| StepError("cannot invert replace-around".into()))?;
+        Ok(Box::new(ReplaceAroundStep {
+            from: self.from,
+            to: self.from + self.slice.size() + gap,
+            gap_from: self.from + self.insert,
+            gap_to: self.from + self.insert + gap,
+            slice: removed,
+            insert: self.gap_from - self.from,
+        }))
+    }
+
+    fn map(&self, mapping: &Mapping) -> Option<Box<dyn Step>> {
+        let from = mapping.map_result(self.from, 1);
+        let to = mapping.map_result(self.to, -1);
+        let gap_from = if self.from == self.gap_from {
+            from.pos
+        } else {
+            mapping.map(self.gap_from, -1)
+        };
+        let gap_to = if self.to == self.gap_to {
+            to.pos
+        } else {
+            mapping.map(self.gap_to, 1)
+        };
+        if (from.deleted_across() && to.deleted_across()) || gap_from < from.pos || gap_to > to.pos
+        {
+            return None;
+        }
+        Some(Box::new(ReplaceAroundStep {
+            from: from.pos,
+            to: to.pos,
+            gap_from,
+            gap_to,
+            slice: self.slice.clone(),
+            insert: self.insert,
+        }))
+    }
+
+    fn to_json(&self) -> Value {
+        json!({
+            "stepType": "replaceAround",
+            "from": self.from,
+            "to": self.to,
+            "gapFrom": self.gap_from,
+            "gapTo": self.gap_to,
+            "insert": self.insert,
+            "slice": slice_to_json(&self.slice),
+        })
+    }
+
+    fn clone_box(&self) -> Box<dyn Step> {
+        Box::new(self.clone())
+    }
+}
+
 /// Reconstruct a step from its JSON form (produced by [`Step::to_json`]).
 pub fn step_from_json(schema: &Schema, v: &Value) -> Result<Box<dyn Step>, DocError> {
     let obj = v
@@ -440,6 +562,28 @@ pub fn step_from_json(schema: &Schema, v: &Value) -> Result<Box<dyn Step>, DocEr
             } else {
                 Box::new(RemoveMarkStep::new(from, to, mark))
             })
+        }
+        "replaceAround" => {
+            let g = |k: &str| {
+                obj.get(k)
+                    .and_then(Value::as_u64)
+                    .map(|n| n as usize)
+                    .ok_or_else(|| {
+                        DocError::MalformedJson(format!("replaceAround step missing `{k}`"))
+                    })
+            };
+            let slice = match obj.get("slice") {
+                Some(s) => slice_from_json(schema, s)?,
+                None => Slice::empty(),
+            };
+            Ok(Box::new(ReplaceAroundStep::new(
+                g("from")?,
+                g("to")?,
+                g("gapFrom")?,
+                g("gapTo")?,
+                slice,
+                g("insert")?,
+            )))
         }
         "attr" => {
             let pos = obj

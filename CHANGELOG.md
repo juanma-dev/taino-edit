@@ -29,5 +29,14 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - Schema-checked JSON (de)serialization that round-trips without loss.
   - Dependency-free HTML serializer (escaped output) and a strict,
     depth-bounded HTML parser validated against the schema.
+- Phase 2 — `taino-edit-core` transforms, state and history:
+  - ProseMirror-ported `Node::replace` / `slice` / `cut` tree surgery.
+  - `Step` trait + `ReplaceStep`, `ReplaceAroundStep`, `AddMarkStep`,
+    `RemoveMarkStep`, `AttrStep` — each with `invert`, `map`, JSON;
+    `step_from_json`. Designed for a future `map_against` (CRDT/OT).
+  - `StepMap`/`Mapping` with deletion flags and mirror/recover.
+  - `Transform` (step + mapping accumulator with editing helpers).
+  - `Selection` (`Text`/`Node`/`All`), `EditorState`, `Transaction`,
+    and a bounded, groupable undo/redo `History`.
 
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main

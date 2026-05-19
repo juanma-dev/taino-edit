@@ -300,6 +300,30 @@ impl Schema {
         ))
     }
 
+    /// Build a node **without** validating its content — e.g. an empty
+    /// wrapper consumed by [`ReplaceAroundStep`](crate::ReplaceAroundStep).
+    /// The replace that consumes it still validates the resulting document,
+    /// so this cannot persist a schema-invalid tree.
+    pub fn create_node(
+        &self,
+        name: &str,
+        attrs: Attrs,
+        children: Vec<Node>,
+        marks: Vec<Mark>,
+    ) -> Result<Node, DocError> {
+        let nt = self
+            .node_type(name)
+            .ok_or_else(|| DocError::UnknownNodeType(name.to_string()))?
+            .clone();
+        let attrs = Self::fill_attrs(&nt.0.spec.attrs, attrs);
+        Ok(Node::new_element(
+            nt,
+            attrs,
+            crate::fragment::Fragment::from_nodes(children),
+            marks,
+        ))
+    }
+
     /// Build a text node carrying `text` with the given marks.
     pub fn text(&self, text: &str, marks: Vec<Mark>) -> Result<Node, DocError> {
         let nt = self

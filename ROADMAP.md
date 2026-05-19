@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 2 — Core: transforms, state, history (Phase 1 complete)  |
+| **Current phase**            | 3 — Core: commands, keymap, input rules (Phase 2 done)   |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -41,14 +41,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ Locked technical choices: MSRV, Leptos pinning strategy, CI matrix, license
 - ✅ **Phase 0 — Workspace scaffold and CI baseline** (2026-05-15): six crates build/`fmt`/`clippy`/`test`/`doc` green; `cargo package --workspace` verifies all six; Leptos pinned at `0.8`, `web-sys`/`js-sys` `0.3`, `wasm-bindgen` `0.2`
 - ✅ **Phase 1 — Core: document model** (2026-05-19): typed tree (Node/Mark/Fragment/Slice), schema + content automaton, `ResolvedPos`, schema-checked JSON round-trip, and a dependency-free escaped HTML serializer + strict depth-bounded HTML parser; 14 acceptance tests in `taino-edit-core`
+- ✅ **Phase 2 — Core: transforms, state, history** (2026-05-19): ProseMirror-ported `replace`, all five steps (Replace/ReplaceAround/AddMark/RemoveMark/Attr) with invert+map+JSON, StepMap/Mapping with mirror-recover, `Transform`, `Selection`, `EditorState`/`Transaction`, bounded undo/redo `History`; 29 step/transform/state tests (generic plugin registry deferred to v0.2)
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 2 begins next session)*
+- 🚧 *(nothing yet — Phase 3 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 2 — Core: transforms, state, history** (target: 2–3 weeks)
+- ⏳ **Phase 3 — Core: commands, keymap, input rules** (target: ~1 week)
 
 ---
 
@@ -113,20 +114,20 @@ gate and it is green.
 **Effort:** 2–3 weeks. Estimated LOC: ~2.5–3k.
 **Definition of done:** undo/redo correct across all step types; transform-against-step contract documented even if no concurrent path uses it yet.
 
-- [ ] `Step` trait — `apply`, `invert`, `map(&Mapping)`, `to_json`, `from_json`. Designed to support a future `map_against(&Step)` for CRDT/OT integration.
-- [ ] Concrete steps:
-  - [ ] `ReplaceStep`
-  - [ ] `ReplaceAroundStep`
-  - [ ] `AddMarkStep`
-  - [ ] `RemoveMarkStep`
-  - [ ] `AttrStep`
-- [ ] `Mapping` — composable position remap across multiple steps
-- [ ] `Transform` — fluent builder that accumulates steps + their mapping
-- [ ] `Selection` enum — `TextSelection`, `NodeSelection`, `AllSelection`
-- [ ] `EditorState` — doc + selection + plugin states + schema
-- [ ] `Transaction` — `Transform` + selection updates + plugin metadata
-- [ ] `Plugin` trait + `PluginKey` — typed per-plugin state slots
-- [ ] `History` plugin — bounded undo/redo stack with grouping rules
+- [x] `Step` trait — `apply`, `invert`, `map(&Mapping)`, `to_json`, `from_json`. Designed to support a future `map_against(&Step)` for CRDT/OT integration (documented on the trait).
+- [x] Concrete steps:
+  - [x] `ReplaceStep`
+  - [x] `ReplaceAroundStep`
+  - [x] `AddMarkStep`
+  - [x] `RemoveMarkStep`
+  - [x] `AttrStep`
+- [x] `Mapping` — composable position remap across multiple steps (StepMap + mirror/recover)
+- [x] `Transform` — fluent builder that accumulates steps + their mapping
+- [x] `Selection` enum — `Text`, `Node`, `All` (positional mapping; "valid selection nearby" is a v0.2 refinement)
+- [x] `EditorState` — doc + selection + schema + history
+- [x] `Transaction` — `Transform` + selection updates + history intent
+- [~] `Plugin` trait + `PluginKey` — **v0.1 cut**: history is the one built-in stateful component; the generic typed-plugin registry is deferred to v0.2 (see Deferred)
+- [x] `History` plugin — bounded undo/redo stack with caller-driven grouping
 
 ### Phase 3 — Core: commands, keymap, input rules
 **Goal:** the standard editing vocabulary that every WYSIWYG needs.
@@ -199,6 +200,7 @@ gate and it is green.
 
 ## Deferred (v0.2+)
 
+- 💤 Generic `Plugin` trait + `PluginKey` typed-state registry — v0.1 ships `History` as the one built-in stateful component; the multi-plugin dispatch generalisation lands here
 - 💤 `schema!{}` proc-macro DSL — sugar over the v0.1 builder
 - 💤 `taino-edit-dioxus` adapter — same dom layer, different reactivity bridge
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
