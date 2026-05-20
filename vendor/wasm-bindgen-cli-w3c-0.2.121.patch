@@ -1,0 +1,176 @@
+--- a/src/wasm_bindgen_test_runner/headless.rs	2026-05-20 09:48:42.521134119 -0500
++++ b/src/wasm_bindgen_test_runner/headless.rs	2026-05-20 09:48:42.529284479 -0500
+@@ -103,6 +103,10 @@
+                         thread::sleep(Duration::from_millis(100));
+                         break;
+                     } else if TcpStream::connect(driver_addr).is_ok() {
++                        // PATCH: chromedriver opens the listen socket before
++                        // its HTTP request loop is ready. Give it a moment so
++                        // the first POST isn't dropped at the TCP layer.
++                        thread::sleep(Duration::from_millis(750));
+                         break 'outer (driver_addr, child);
+                     } else if start.elapsed() >= max {
+                         bail!("driver failed to bind port during startup")
+@@ -527,10 +531,14 @@
+             }
+             Driver::Chrome(_) => {
+                 #[derive(Deserialize)]
+-                struct Response {
++                struct ResponseValue {
+                     #[serde(rename = "sessionId")]
+                     session_id: String,
+                 }
++                #[derive(Deserialize)]
++                struct Response {
++                    value: ResponseValue,
++                }
+                 cap.entry("goog:chromeOptions".to_string())
+                     .or_insert_with(|| Json::Object(serde_json::Map::new()))
+                     .as_object_mut()
+@@ -547,12 +555,18 @@
+                         Json::String("disable-dev-shm-usage".to_string()),
+                         Json::String("no-sandbox".to_string()),
+                     ]);
+-                let request = LegacyNewSessionParameters {
+-                    desired: cap,
+-                    required: Capabilities::new(),
++                // ChromeDriver >= 75 is strictly W3C; send capabilities.alwaysMatch
++                // instead of the legacy JSON-Wire desiredCapabilities (upstream
++                // wasm-bindgen-cli 0.2.121 still uses the old shape — patched here).
++                cap.entry("browserName".to_string())
++                    .or_insert_with(|| Json::String("chrome".to_string()));
++                let session_config = SpecNewSessionParameters {
++                    always_match: cap,
++                    first_match: vec![Capabilities::new()],
+                 };
++                let request = json!({ "capabilities": session_config });
+                 let x: Response = self.post("/session", &request)?;
+-                Ok(x.session_id)
++                Ok(x.value.session_id)
+             }
+             Driver::Edge(_) => {
+                 #[derive(Deserialize)]
+@@ -712,19 +726,113 @@
+     }
+ 
+     fn doit(&mut self, path: &str, method: Method) -> Result<String, Error> {
++        // Hand-rolled HTTP/1.1 over TcpStream. Replaces `ureq`'s POST, which
++        // every WebDriver embedded HTTP server (ChromeDriver, geckodriver)
++        // resets in this WSL environment. Avoids `Expect: 100-continue`,
++        // chunked encoding and keep-alive — sends a plain Content-Length
++        // request with `Connection: close`. The same body via `curl` works,
++        // and this minimal client matches `curl`'s behaviour.
++        let _ = &self.agent; // intentionally unused; kept for ABI stability.
+         let url = self.driver_url.join(path)?;
+-        let mut response = match method {
+-            Method::Post(data) => self
+-                .agent
+-                .post(url.as_str())
+-                .content_type("application/json")
+-                .send(data.as_bytes())?,
+-            Method::Get => self.agent.get(url.as_str()).call()?,
+-            Method::Delete => self.agent.delete(url.as_str()).call()?,
++        let host = url.host_str().context("driver url missing host")?.to_string();
++        let port = url.port().unwrap_or(80);
++        let mut target = url.path().to_string();
++        if let Some(q) = url.query() {
++            target.push('?');
++            target.push_str(q);
++        }
++
++        let (verb, body): (&str, Option<&[u8]>) = match method {
++            Method::Get => ("GET", None),
++            Method::Post(data) => ("POST", Some(data.as_bytes())),
++            Method::Delete => ("DELETE", None),
+         };
+ 
+-        let response_code = response.status();
+-        let result = response.body_mut().read_to_string()?;
++        let mut req = format!(
++            "{verb} {target} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\nAccept: application/json\r\nUser-Agent: wasm-bindgen-test-runner/0.2.121\r\n"
++        );
++        if let Some(b) = body {
++            req.push_str("Content-Type: application/json\r\n");
++            req.push_str(&format!("Content-Length: {}\r\n", b.len()));
++        }
++        req.push_str("\r\n");
++        debug!(
++            "{verb} {target}{}",
++            body.map(|b| format!(" {}", String::from_utf8_lossy(b)))
++                .unwrap_or_default()
++        );
++
++        let mut stream =
++            TcpStream::connect((host.as_str(), port)).context("connect to webdriver")?;
++        stream.set_read_timeout(Some(Duration::from_secs(60)))?;
++        stream.set_write_timeout(Some(Duration::from_secs(60)))?;
++        let _ = stream.set_nodelay(true);
++        stream
++            .write_all(req.as_bytes())
++            .context("send request head")?;
++        if let Some(b) = body {
++            stream.write_all(b).context("send request body")?;
++        }
++        let _ = stream.flush();
++
++        // ChromeDriver / geckodriver do NOT close the socket on `Connection:
++        // close` — they wait forever. So instead of `read_to_end` we parse
++        // headers byte-by-byte until `\r\n\r\n`, then read exactly
++        // `Content-Length` body bytes.
++        use std::io::BufRead;
++        let mut reader = std::io::BufReader::new(stream);
++        let mut head_buf = Vec::with_capacity(512);
++        loop {
++            let before = head_buf.len();
++            let n = reader
++                .read_until(b'\n', &mut head_buf)
++                .context("read response header line")?;
++            if n == 0 {
++                bail!("EOF before response headers completed");
++            }
++            if head_buf[before..].ends_with(b"\r\n")
++                && (head_buf.ends_with(b"\r\n\r\n") || head_buf.ends_with(b"\n\r\n"))
++            {
++                break;
++            }
++        }
++
++        let head = std::str::from_utf8(&head_buf).context("non-utf8 response headers")?;
++        let mut lines = head.split("\r\n");
++        let status_line = lines.next().unwrap_or("");
++        let response_code: u16 = status_line
++            .split_whitespace()
++            .nth(1)
++            .and_then(|s| s.parse().ok())
++            .context("could not parse status line")?;
++        let mut content_length: usize = 0;
++        let mut chunked = false;
++        for line in lines {
++            if line.is_empty() {
++                break;
++            }
++            if let Some((k, v)) = line.split_once(':') {
++                let k = k.trim().to_ascii_lowercase();
++                let v = v.trim();
++                if k == "content-length" {
++                    content_length = v.parse().unwrap_or(0);
++                } else if k == "transfer-encoding" && v.eq_ignore_ascii_case("chunked") {
++                    chunked = true;
++                }
++            }
++        }
++        if chunked {
++            bail!("chunked transfer-encoding not supported by patched runner");
++        }
++
++        let mut body_buf = vec![0u8; content_length];
++        if content_length > 0 {
++            std::io::Read::read_exact(&mut reader, &mut body_buf)
++                .context("read response body")?;
++        }
++        let result = std::str::from_utf8(&body_buf)
++            .context("non-utf8 response body")?
++            .to_string();
+ 
+         if response_code != 200 {
+             bail!("non-200 response code: {response_code}\n{result}");

@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 4 — `taino-edit-dom` contenteditable bridge (Phase 3 done) |
+| **Current phase**            | 5 — `taino-edit-leptos` adapter (Phase 4 done)           |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -43,14 +43,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 1 — Core: document model** (2026-05-19): typed tree (Node/Mark/Fragment/Slice), schema + content automaton, `ResolvedPos`, schema-checked JSON round-trip, and a dependency-free escaped HTML serializer + strict depth-bounded HTML parser; 14 acceptance tests in `taino-edit-core`
 - ✅ **Phase 2 — Core: transforms, state, history** (2026-05-19): ProseMirror-ported `replace`, all five steps (Replace/ReplaceAround/AddMark/RemoveMark/Attr) with invert+map+JSON, StepMap/Mapping with mirror-recover, `Transform`, `Selection`, `EditorState`/`Transaction`, bounded undo/redo `History`; 29 step/transform/state tests (generic plugin registry deferred to v0.2)
 - ✅ **Phase 3 — Core: commands, keymap, input rules** (2026-05-19): `Command`/`chain`, selection/mark/block/join commands, `Transform::split`, cross-platform `Keymap` + `base_keymap`, regex `InputRules` (`text_replace`/`textblock_type`/`wrapping`); 27 command/keymap/inputrule tests. `taino-edit-core` is feature-complete for v0.1
+- ✅ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (2026-05-20): `EditorView` with mount + incremental DOM diff/patch; bidirectional `Selection` ↔ `getSelection`; `read_dom_changes()` for typing; IME composition lifecycle; clipboard `paste_text`/`paste_html` (HTML sanitized through `Schema::parse_html`); drag/drop primitives; focus + tabindex; node decorations. **46 wasm_bindgen_test cases pass in headless Chromium 148** via a small patch on `wasm-bindgen-cli` (vendored in `vendor/`) + `scripts/wasm-test.sh`. Adapter-side event wiring (MutationObserver, selectionchange, paste/drop, composition events) lands in Phase 5
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 4 begins next session)*
+- 🚧 *(nothing yet — Phase 5 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (target: 2–3 weeks; the riskiest phase)
+- ⏳ **Phase 5 — `taino-edit-leptos` adapter** (target: ~1 week)
 
 ---
 
@@ -149,17 +150,17 @@ gate and it is green.
 **Effort:** 2–3 weeks. Estimated LOC: ~2–3k. **This is the riskiest phase** — contenteditable is famously hostile.
 **Definition of done:** a manual harness can type, select, apply marks, undo, paste plain text, and IME-compose without state desync, in Chromium and Firefox.
 
-- [ ] `NodeView` trait — pluggable per-node-type DOM rendering
-- [ ] Default `ViewDesc` tree — mirrors document tree, holds DOM nodes
-- [ ] DOM diff/patch — minimal mutations on state change
-- [ ] `MutationObserver` adapter — DOM mutations → reconstructed `Transaction`
-- [ ] Selection sync — `window.getSelection()` ↔ core `Selection` (both directions, loop-safe)
-- [ ] Reentrancy guard — distinguish our own writes from user writes
-- [ ] IME composition — `compositionstart` / `compositionupdate` / `compositionend` lifecycle
-- [ ] Clipboard — `copy`, `cut`, `paste` (plain text + HTML, sanitized through schema)
-- [ ] Drag-and-drop — `dragstart` / `drop` with Slice serialization
-- [ ] Focus management and `tabindex`
-- [ ] Decorations — inline and node-level (for selection highlights, inline UI hints)
+- [~] `NodeView` trait — pluggable per-node-type rendering via `NodeSpec.to_dom`/`MarkSpec.to_dom` (from `core`); a richer per-node-view trait with imperative DOM hooks is deferred to v0.2
+- [x] Default `ViewDesc` tree — mirrors document tree, holds DOM nodes
+- [x] DOM diff/patch — minimal mutations on state change (text-only reuses the same DOM text node; identical subtrees untouched)
+- [~] `MutationObserver` adapter — `EditorView::read_dom_changes()` produces a `Transform` from DOM-side text edits; wiring an actual `MutationObserver` and dispatching is the adapter's job (Phase 5)
+- [x] Selection sync — `window.getSelection()` ↔ core `Selection` (`set_selection`/`read_selection`, bidirectional)
+- [~] Reentrancy guard — IME `composing` flag covers the most acute case; a `selectionchange` echo guard ships with the Phase 5 adapter event wiring
+- [x] IME composition — `composition_start`/`composition_end`; `read_dom_changes` suppresses transient glyph states
+- [x] Clipboard — `paste_text` and `paste_html` (the latter sanitized through `Schema::parse_html`; copy/cut are adapter-driven serialization of selection)
+- [x] Drag-and-drop — `extract_slice` + `drop_slice` (the actual `dragstart`/`drop` event wiring and `DataTransfer` serialization is adapter-side)
+- [x] Focus management and `tabindex` — `focus`/`has_focus`/`set_tabindex`; mount sets `tabindex="0"` by default
+- [~] Decorations — node-level (`Decoration::Node` adds a CSS class to a block); inline range decorations deferred to v0.2 (require text-node splitting that interacts with diff/patch)
 
 ### Phase 5 — `taino-edit-leptos` adapter
 **Goal:** an idiomatic Leptos component.

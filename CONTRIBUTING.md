@@ -26,6 +26,22 @@ cargo doc --no-deps --all-features
 The project is publishable at every checkpoint, so also keep
 `cargo publish --dry-run` succeeding for each crate.
 
+### Browser tests (`taino-edit-dom`)
+
+The DOM bridge in `taino-edit-dom` is exercised against a real headless
+Chromium via `wasm-bindgen-test`. The pipeline needs a small local
+patch on `wasm-bindgen-cli` (see [`vendor/`](vendor/README.md)) plus
+Chrome for Testing in `.tools/`. Two helper scripts make this
+reproducible on Linux:
+
+```sh
+./scripts/install-wasm-test-runner.sh   # one-time: patch & install wasm-bindgen-cli
+./scripts/wasm-test.sh                  # bootstraps .tools/ if missing, then runs browser tests
+```
+
+Pass extra `cargo test` args through `wasm-test.sh`, e.g.
+`./scripts/wasm-test.sh --test selection`.
+
 ## Commit & PR conventions
 
 - **Branching:** trunk-based on `main`; topic branches for anything non-trivial.

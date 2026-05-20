@@ -46,5 +46,29 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - Regex `InputRules`: `text_replace_rule`, `textblock_type_rule`
     (`## ` → heading), `wrapping_rule` (`> ` → blockquote).
   - `taino-edit-core` is now feature-complete for the v0.1 milestone.
+- Phase 4 — `taino-edit-dom` contenteditable bridge:
+  - `EditorView::mount` renders a `Node` into a real `contenteditable`,
+    setting `tabindex="0"` for keyboard accessibility, and owns a
+    `ViewDesc` tree mirroring the document.
+  - Incremental `EditorView::update` patches the DOM in place:
+    identical subtrees keep their nodes, text-only changes reuse the
+    same `Text` node, only differing nodes are added/removed/replaced.
+  - Bidirectional selection sync: `set_selection` writes the editor
+    selection into `window.getSelection()`; `read_selection` translates
+    the browser's anchor/focus back to a doc-level `Selection`.
+  - `read_dom_changes()` produces a `Transform` from DOM-side text edits
+    (typing or IME commits) — the algorithmic half of a
+    `MutationObserver` adapter.
+  - IME composition lifecycle (`composition_start`/`composition_end`/
+    `is_composing`): transient glyph states never produce transactions.
+  - Clipboard paste: `paste_text` (plain) and `paste_html` (sanitized
+    through the schema's strict, depth-bounded `parse_html`).
+  - Drag-and-drop primitives: `extract_slice` and `drop_slice`.
+  - Focus management: `focus`/`has_focus`/`set_tabindex`.
+  - Node decorations: a CSS class on a block element.
+  - `vendor/wasm-bindgen-cli-w3c-0.2.121.patch` plus
+    `scripts/install-wasm-test-runner.sh` and `scripts/wasm-test.sh`
+    make the wasm-bindgen browser-test pipeline reproducible: 46
+    `wasm_bindgen_test` cases pass in headless Chromium 148.
 
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main
