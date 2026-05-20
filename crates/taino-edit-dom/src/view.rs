@@ -70,6 +70,21 @@ impl EditorView {
     pub fn children(&self) -> &[ViewDesc] {
         &self.children
     }
+
+    /// Reconcile the mounted DOM with `new_doc`, performing minimal
+    /// mutations: identical subtrees are kept, text-only changes set
+    /// `nodeValue` in place, same-type elements recurse, and only nodes that
+    /// truly changed are removed/replaced/appended.
+    pub fn update(&mut self, new_doc: Node) {
+        let document = self
+            .root
+            .owner_document()
+            .expect("root element has an owner Document");
+        let new_kids: Vec<Node> = new_doc.content().iter().cloned().collect();
+        let new_descs = patch_children(&document, &self.root, &self.children, &new_kids);
+        self.children = new_descs;
+        self.doc = new_doc;
+    }
 }
 
 /// Build a `ViewDesc` for `node`, creating its DOM subtree along the way.
@@ -132,4 +147,86 @@ fn create_element(document: &Document, spec: &DomSpec) -> Element {
         let _ = el.set_attribute(name, value);
     }
     el
+}
+
+// ---- diff / patch -------------------------------------------------------
+
+/// Same type + attrs + marks — i.e. only the inline content differs.
+fn same_markup(a: &Node, b: &Node) -> bool {
+    a.node_type() == b.node_type() && a.attrs() == b.attrs() && a.marks() == b.marks()
+}
+
+/// Patch the children of `parent_dom` in place. Returns the new descriptors.
+fn patch_children(
+    document: &Document,
+    parent_dom: &Element,
+    old: &[ViewDesc],
+    new: &[Node],
+) -> Vec<ViewDesc> {
+    let mut result = Vec::with_capacity(new.len());
+    for (i, new_node) in new.iter().enumerate() {
+        if let Some(old_desc) = old.get(i) {
+            if let Some(patched) = try_patch(document, old_desc, new_node) {
+                result.push(patched);
+                continue;
+            }
+            // Different enough that we must replace.
+            let fresh = render(new_node, document);
+            let _ = parent_dom.replace_child(&fresh.dom_node(), &old_desc.dom_node());
+            result.push(fresh);
+        } else {
+            // New child past the old length: append.
+            let fresh = render(new_node, document);
+            let _ = parent_dom.append_child(&fresh.dom_node());
+            result.push(fresh);
+        }
+    }
+    // Remove leftover old DOM nodes the new tree no longer needs.
+    for stale in old.iter().skip(new.len()) {
+        let _ = parent_dom.remove_child(&stale.dom_node());
+    }
+    result
+}
+
+/// Try to update `old` in place to match `new`; return the new desc if the
+/// patch could be applied, or `None` if the caller must remove + re-render.
+fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc> {
+    // Structurally identical → keep the existing desc / DOM untouched.
+    if old.node() == new {
+        return Some(old.clone());
+    }
+
+    match old {
+        ViewDesc::Text {
+            node,
+            text,
+            wrapper,
+        } => {
+            if !new.is_text() || !same_markup(node, new) {
+                return None;
+            }
+            text.set_data(new.text().unwrap_or(""));
+            Some(ViewDesc::Text {
+                node: new.clone(),
+                text: text.clone(),
+                wrapper: wrapper.clone(),
+            })
+        }
+        ViewDesc::Element {
+            node,
+            dom,
+            children,
+        } => {
+            if new.is_text() || node.node_type() != new.node_type() || node.attrs() != new.attrs() {
+                return None;
+            }
+            let new_kids: Vec<Node> = new.content().iter().cloned().collect();
+            let new_children = patch_children(document, dom, children, &new_kids);
+            Some(ViewDesc::Element {
+                node: new.clone(),
+                dom: dom.clone(),
+                children: new_children,
+            })
+        }
+    }
 }
