@@ -5,7 +5,7 @@
 //! sync, `MutationObserver`, IME and clipboard land in subsequent units of
 //! Phase 4.
 
-use taino_edit_core::{DomSpec, Node, Schema, Selection};
+use taino_edit_core::{DomSpec, Fragment, Node, Schema, Selection, Slice, Transform};
 use wasm_bindgen::JsValue;
 use web_sys::{Document, Element};
 
@@ -125,6 +125,44 @@ impl EditorView {
         Some(Selection::Text { anchor, head })
     }
 
+    /// Detect a divergence between a text node's DOM contents and its
+    /// document text (the typical effect of typing/IME), and produce a
+    /// [`Transform`] that, when applied to the current doc, brings them back
+    /// into sync. Returns `None` if every text run matches.
+    ///
+    /// v0.1 reports the first divergent text run. Adapters wire this up
+    /// behind a `MutationObserver` so it runs on every browser-side edit.
+    pub fn read_dom_changes(&self) -> Option<Transform> {
+        let mut found = None;
+        collect_text_changes(&self.children, 0, &mut |desc, doc_pos| {
+            if found.is_some() {
+                return;
+            }
+            if let ViewDesc::Text { node, text, .. } = desc {
+                let dom_data = text.data();
+                let doc_text = node.text().unwrap_or("");
+                if dom_data != doc_text {
+                    found = Some((doc_pos, doc_text.chars().count(), dom_data, node.clone()));
+                }
+            }
+        });
+        let (pos, old_len, new_text, prev_text_node) = found?;
+        let mut transform = Transform::new(self.doc.clone());
+        let replacement = if new_text.is_empty() {
+            Slice::empty()
+        } else {
+            let new_node = self
+                .schema
+                .text(&new_text, prev_text_node.marks().to_vec())
+                .ok()?;
+            Slice::new(Fragment::from_node(new_node), 0, 0)
+        };
+        transform
+            .replace(pos, pos + old_len, replacement, &self.schema)
+            .ok()?;
+        Some(transform)
+    }
+
     /// Reconcile the mounted DOM with `new_doc`, performing minimal
     /// mutations: identical subtrees are kept, text-only changes set
     /// `nodeValue` in place, same-type elements recurse, and only nodes that
@@ -201,6 +239,29 @@ fn create_element(document: &Document, spec: &DomSpec) -> Element {
         let _ = el.set_attribute(name, value);
     }
     el
+}
+
+/// Walk descs in doc order, calling `visit` for each descriptor with its
+/// absolute document position at the start of the descriptor's coverage.
+fn collect_text_changes(
+    descs: &[ViewDesc],
+    base: usize,
+    visit: &mut dyn FnMut(&ViewDesc, usize),
+) -> usize {
+    let mut pos = base;
+    for d in descs {
+        match d {
+            ViewDesc::Text { node, .. } => {
+                visit(d, pos);
+                pos += node.node_size();
+            }
+            ViewDesc::Element { node, children, .. } => {
+                collect_text_changes(children, pos + 1, visit);
+                pos += node.node_size();
+            }
+        }
+    }
+    pos
 }
 
 // ---- diff / patch -------------------------------------------------------
