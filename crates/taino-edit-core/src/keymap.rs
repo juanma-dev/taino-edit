@@ -148,6 +148,14 @@ impl Keymap {
         }
     }
 
+    /// Add or replace a binding by its `Mod-`-using key spec (e.g.
+    /// `"Mod-b"`). Extensions use this to inject bindings on top of
+    /// [`base_keymap`].
+    pub fn add(&mut self, spec: &str, command: Command) {
+        let canonical = self.normalize_spec(spec);
+        self.bindings.insert(canonical, command);
+    }
+
     /// Number of bindings.
     pub fn len(&self) -> usize {
         self.bindings.len()
