@@ -71,4 +71,23 @@ Pre-1.0, minor version bumps may include breaking API changes.
     make the wasm-bindgen browser-test pipeline reproducible: 46
     `wasm_bindgen_test` cases pass in headless Chromium 148.
 
+- Phase 5 — `taino-edit-leptos` adapter:
+  - `<TainoEditor>` component takes a single `RwSignal<EditorState>`;
+    mount/diff happen automatically through a Leptos `Effect`, with the
+    `EditorView` parked in a `StoredValue<…, LocalStorage>` so the
+    `!Send` view can live next to Send+Sync effect closures.
+  - Browser events wired: `input` -> `read_dom_changes` -> commit,
+    `compositionstart`/`compositionend` -> IME lifecycle, `paste` ->
+    `paste_html`/`paste_text` (sanitized). Every listener is dropped on
+    `on_cleanup` via an RAII `EventCloser`.
+  - `taino_edit_core::Step` gains `Send + Sync` bounds so
+    `RwSignal<EditorState>` can live in Leptos's default `SyncStorage`.
+  - Curated re-exports: `SchemaBuilder`, `NodeSpec`, `MarkSpec`,
+    `EditorState`, `Selection`, `Transaction`, the standard commands,
+    `base_keymap`, `EditorView`, `Decoration`, …
+  - `examples/basic-leptos/` is a `trunk serve`-buildable demo with
+    Bold/Undo/Redo buttons + a mounted editor.
+  - 6 wasm_bindgen_test cases drive the component through Leptos's CSR
+    runtime in headless Chromium 148.
+
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main

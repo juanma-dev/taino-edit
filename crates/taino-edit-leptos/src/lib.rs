@@ -13,10 +13,22 @@
 #![warn(missing_docs, rust_2018_idioms)]
 
 use leptos::prelude::*;
-use taino_edit_core::{EditorState, Transform};
-use taino_edit_dom::EditorView;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+
+/// Re-exports of the most-used `taino-edit-core` items so adapter consumers
+/// can stay on a single `use taino_edit_leptos::…` line.
+#[doc(no_inline)]
+pub use taino_edit_core::{
+    base_keymap, delete_selection, join_backward, join_forward, lift, remove_mark, select_all,
+    set_block_type, set_mark, split_block, toggle_mark, wrap_in, AttrSpec, AttrValue, Attrs,
+    Command, Dispatch, DocError, DomSpec, EditorState, KeyPress, Keymap, Mark, MarkSpec, MarkType,
+    Node, NodeSpec, NodeType, ResolvedPos, Schema, SchemaBuilder, Selection, Slice, Transaction,
+    Transform,
+};
+/// Re-export the DOM-bridge surface that the Leptos adapter wraps.
+#[doc(no_inline)]
+pub use taino_edit_dom::{Decoration, EditorView, ViewDesc};
 
 /// A Leptos component that renders an editor backed by a
 /// `RwSignal<EditorState>`. Whenever the signal changes, the mounted DOM is

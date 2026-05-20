@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 5 — `taino-edit-leptos` adapter (Phase 4 done)           |
+| **Current phase**            | 6 — `taino-edit-extensions` (Phase 5 done)               |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -44,14 +44,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 2 — Core: transforms, state, history** (2026-05-19): ProseMirror-ported `replace`, all five steps (Replace/ReplaceAround/AddMark/RemoveMark/Attr) with invert+map+JSON, StepMap/Mapping with mirror-recover, `Transform`, `Selection`, `EditorState`/`Transaction`, bounded undo/redo `History`; 29 step/transform/state tests (generic plugin registry deferred to v0.2)
 - ✅ **Phase 3 — Core: commands, keymap, input rules** (2026-05-19): `Command`/`chain`, selection/mark/block/join commands, `Transform::split`, cross-platform `Keymap` + `base_keymap`, regex `InputRules` (`text_replace`/`textblock_type`/`wrapping`); 27 command/keymap/inputrule tests. `taino-edit-core` is feature-complete for v0.1
 - ✅ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (2026-05-20): `EditorView` with mount + incremental DOM diff/patch; bidirectional `Selection` ↔ `getSelection`; `read_dom_changes()` for typing; IME composition lifecycle; clipboard `paste_text`/`paste_html` (HTML sanitized through `Schema::parse_html`); drag/drop primitives; focus + tabindex; node decorations. **46 wasm_bindgen_test cases pass in headless Chromium 148** via a small patch on `wasm-bindgen-cli` (vendored in `vendor/`) + `scripts/wasm-test.sh`. Adapter-side event wiring (MutationObserver, selectionchange, paste/drop, composition events) lands in Phase 5
+- ✅ **Phase 5 — `taino-edit-leptos` adapter** (2026-05-20): the `<TainoEditor>` component backed by a `RwSignal<EditorState>`; mounts `EditorView` on first reactive tick, patches in place on every change, and wires `input`/`compositionstart`/`compositionend`/`paste` so browser-side edits commit back through the same signal. `examples/basic-leptos/` is `trunk serve`-buildable (Bold/Undo/Redo + editor). 6 wasm_bindgen_test cases run the component through Leptos's CSR runtime in headless Chromium
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 5 begins next session)*
+- 🚧 *(nothing yet — Phase 6 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 5 — `taino-edit-leptos` adapter** (target: ~1 week)
+- ⏳ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (target: ~1 week)
 
 ---
 
@@ -167,11 +168,11 @@ gate and it is green.
 **Effort:** ~1 week. Estimated LOC: ~0.5–1k.
 **Definition of done:** the example app builds with `trunk serve` and renders a working editor.
 
-- [ ] `<TainoEditor>` component with props: `state: Signal<EditorState>`, `dispatch: Callback<Transaction>`, `plugins: Vec<Plugin>`
-- [ ] Mount/unmount lifecycle — `create_effect` to attach `dom` view, `on_cleanup` to tear down
-- [ ] Bridge between Leptos signals and `dom`-layer state pushes (avoid double-update loops)
-- [ ] Public re-exports: schema builder, common commands, `base_keymap`
-- [ ] Storybook-style example pages under `examples/leptos/`
+- [x] `<TainoEditor>` component — final prop shape is a single `RwSignal<EditorState>` (cleaner than separate state + dispatch + plugins, since plugins are deferred to v0.2). Browser-side edits are committed back through the same signal.
+- [x] Mount/unmount lifecycle — `Effect::new` mounts the `EditorView` on first reactive run and patches it on every state change; `on_cleanup` drops the view + detaches every event listener
+- [x] Bridge between Leptos signals and `dom`-layer state pushes — `EditorView` is kept in a `StoredValue<…, LocalStorage>` so the (Send+Sync) effect closures can reach the `!Send` view through a Copy handle without echo loops
+- [x] Public re-exports — `taino_edit_leptos::{SchemaBuilder, NodeSpec, MarkSpec, EditorState, Selection, Transaction, base_keymap, toggle_mark/set_mark/remove_mark, set_block_type/wrap_in/lift/split_block/join_…, EditorView, Decoration, …}`
+- [~] Example pages under `examples/` — `examples/basic-leptos/` is the v0.1 cut (Bold/Undo/Redo + editor, `trunk serve`-buildable, DoD met). A richer storybook-style multi-page suite is polish for the release-prep pass
 
 ### Phase 6 — `taino-edit-extensions`: the v0.1 extension set
 **Goal:** five extensions that prove the architecture and make the demo non-trivial.

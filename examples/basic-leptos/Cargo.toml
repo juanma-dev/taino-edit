@@ -1,0 +1,12 @@
+[package]
+name = "basic-leptos"
+description = "A minimal taino-edit + Leptos demo. Build with `trunk serve` in this directory."
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+leptos = { version = "0.8.3", features = ["csr"] }
+taino-edit-leptos = { path = "../../crates/taino-edit-leptos" }
