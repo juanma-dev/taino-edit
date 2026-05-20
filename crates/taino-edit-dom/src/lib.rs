@@ -13,6 +13,7 @@
 #![warn(missing_docs, rust_2018_idioms)]
 
 pub mod desc;
+pub mod position_map;
 pub mod view;
 
 pub use desc::ViewDesc;

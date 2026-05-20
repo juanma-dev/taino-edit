@@ -5,10 +5,12 @@
 //! sync, `MutationObserver`, IME and clipboard land in subsequent units of
 //! Phase 4.
 
-use taino_edit_core::{DomSpec, Node, Schema};
+use taino_edit_core::{DomSpec, Node, Schema, Selection};
+use wasm_bindgen::JsValue;
 use web_sys::{Document, Element};
 
 use crate::desc::ViewDesc;
+use crate::position_map::{doc_pos_to_dom, dom_to_doc_pos};
 
 /// The DOM-bound editor view.
 #[derive(Debug)]
@@ -69,6 +71,58 @@ impl EditorView {
     /// The view descriptors mirroring the document's top-level children.
     pub fn children(&self) -> &[ViewDesc] {
         &self.children
+    }
+
+    /// Write the editor selection to the browser's `window.getSelection()`.
+    ///
+    /// Text selections map both endpoints; node selections collapse to the
+    /// node's start/end positions; an all-selection covers the whole root.
+    /// Returns `Err` if the underlying DOM call rejects (e.g. no window).
+    pub fn set_selection(&self, sel: Selection) -> Result<(), JsValue> {
+        let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+        let selection = window
+            .get_selection()?
+            .ok_or_else(|| JsValue::from_str("no Selection api"))?;
+
+        let (anchor_pos, head_pos) = match sel {
+            Selection::Text { anchor, head } => (anchor, head),
+            Selection::Node { pos } => {
+                let len = self.doc.node_at(pos).map(|n| n.node_size()).unwrap_or(0);
+                (pos, pos + len)
+            }
+            Selection::All => (0, self.doc.content().size()),
+        };
+
+        let (anchor_node, anchor_off) = doc_pos_to_dom(&self.root, &self.children, anchor_pos)
+            .ok_or_else(|| JsValue::from_str("anchor out of range"))?;
+        let (focus_node, focus_off) = doc_pos_to_dom(&self.root, &self.children, head_pos)
+            .ok_or_else(|| JsValue::from_str("head out of range"))?;
+
+        selection.remove_all_ranges()?;
+        selection.set_base_and_extent(&anchor_node, anchor_off, &focus_node, focus_off)
+    }
+
+    /// Read the current browser selection and translate its endpoints back
+    /// into a doc-level [`Selection::Text`]. `None` if the browser has no
+    /// selection (or anchor/focus are outside the mounted root).
+    pub fn read_selection(&self) -> Option<Selection> {
+        let window = web_sys::window()?;
+        let selection = window.get_selection().ok().flatten()?;
+        let anchor_node = selection.anchor_node()?;
+        let focus_node = selection.focus_node()?;
+        let anchor = dom_to_doc_pos(
+            &self.root,
+            &self.children,
+            &anchor_node,
+            selection.anchor_offset(),
+        )?;
+        let head = dom_to_doc_pos(
+            &self.root,
+            &self.children,
+            &focus_node,
+            selection.focus_offset(),
+        )?;
+        Some(Selection::Text { anchor, head })
     }
 
     /// Reconcile the mounted DOM with `new_doc`, performing minimal
