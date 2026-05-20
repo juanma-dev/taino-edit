@@ -163,6 +163,51 @@ impl EditorView {
         Some(transform)
     }
 
+    /// The currently-selected document range (or, when the selection lies
+    /// outside the mounted root, `None`).
+    fn paste_range(&self) -> Option<(usize, usize)> {
+        let sel = self.read_selection()?;
+        Some(match sel {
+            Selection::Text { anchor, head } => (anchor.min(head), anchor.max(head)),
+            Selection::Node { pos } => {
+                let len = self.doc.node_at(pos).map(|n| n.node_size()).unwrap_or(0);
+                (pos, pos + len)
+            }
+            Selection::All => (0, self.doc.content().size()),
+        })
+    }
+
+    /// Paste plain text at the current DOM selection, returning the
+    /// resulting [`Transform`]. The text becomes a new text node with no
+    /// marks; the prior selection is replaced (range or caret).
+    pub fn paste_text(&self, text: &str) -> Option<Transform> {
+        let (from, to) = self.paste_range()?;
+        let mut transform = Transform::new(self.doc.clone());
+        let slice = if text.is_empty() {
+            Slice::empty()
+        } else {
+            let node = self.schema.text(text, vec![]).ok()?;
+            Slice::new(Fragment::from_node(node), 0, 0)
+        };
+        transform.replace(from, to, slice, &self.schema).ok()?;
+        Some(transform)
+    }
+
+    /// Paste HTML at the current DOM selection. The HTML is parsed through
+    /// [`Schema::parse_html`] — which is already strict and depth-bounded,
+    /// so untrusted clipboard content cannot inject schema-illegal
+    /// structure — and the resulting blocks are spliced into the range.
+    /// Returns `None` when parsing fails or the replacement would violate
+    /// the schema for the destination.
+    pub fn paste_html(&self, html: &str) -> Option<Transform> {
+        let parsed = self.schema.parse_html(html).ok()?;
+        let (from, to) = self.paste_range()?;
+        let slice = Slice::new(parsed.content().clone(), 0, 0);
+        let mut transform = Transform::new(self.doc.clone());
+        transform.replace(from, to, slice, &self.schema).ok()?;
+        Some(transform)
+    }
+
     /// Reconcile the mounted DOM with `new_doc`, performing minimal
     /// mutations: identical subtrees are kept, text-only changes set
     /// `nodeValue` in place, same-type elements recurse, and only nodes that
