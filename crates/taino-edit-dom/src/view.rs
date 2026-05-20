@@ -294,6 +294,25 @@ impl EditorView {
         Some(transform)
     }
 
+    /// Extract a [`Slice`] of the document between `from` and `to` — what
+    /// adapters dispatch as the "dragged content" on `dragstart`. Returns
+    /// `None` if the range is out of bounds.
+    pub fn extract_slice(&self, from: usize, to: usize) -> Option<Slice> {
+        self.doc.slice(from, to).ok()
+    }
+
+    /// Insert `slice` at document position `at`, producing the
+    /// [`Transform`] that commits the drop. Returns `None` when the
+    /// resulting doc would violate the schema (e.g. dropping a block into
+    /// inline content).
+    pub fn drop_slice(&self, slice: &Slice, at: usize) -> Option<Transform> {
+        let mut transform = Transform::new(self.doc.clone());
+        transform
+            .replace(at, at, slice.clone(), &self.schema)
+            .ok()?;
+        Some(transform)
+    }
+
     /// Reconcile the mounted DOM with `new_doc`, performing minimal
     /// mutations: identical subtrees are kept, text-only changes set
     /// `nodeValue` in place, same-type elements recurse, and only nodes that
