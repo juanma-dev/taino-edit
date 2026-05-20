@@ -12,7 +12,29 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-leptos = "0.8.3"
+leptos = { version = "0.8.3", features = ["csr"] }
 taino-edit-core = { workspace = true }
 taino-edit-dom = { workspace = true }
-# `leptos` is added (version-pinned) during scaffold — see DESIGN_NOTES §7.
+wasm-bindgen = "0.2.121"
+
+[dependencies.web-sys]
+version = "0.3.98"
+features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlDivElement",
+    "Node",
+    "Event",
+    "EventTarget",
+    "KeyboardEvent",
+    "InputEvent",
+    "CompositionEvent",
+    "DataTransfer",
+]
+
+[dev-dependencies]
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+serde_json = "1.0.149"
+wasm-bindgen-test = "0.3.71"

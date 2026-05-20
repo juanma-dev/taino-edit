@@ -496,10 +496,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -521,6 +523,18 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -781,6 +795,7 @@ dependencies = [
  "cfg-if",
  "either_of",
  "futures",
+ "getrandom",
  "hydration_context",
  "leptos_config",
  "leptos_dom",
@@ -1598,9 +1613,14 @@ dependencies = [
 name = "taino-edit-leptos"
 version = "0.1.0"
 dependencies = [
+ "gloo-timers",
  "leptos",
+ "serde_json",
  "taino-edit-core",
  "taino-edit-dom",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

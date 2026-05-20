@@ -32,7 +32,7 @@ impl std::error::Error for StepError {}
 /// rebased changes compose. `to_json` plus
 /// [`step_from_json`] give lossless persistence. A future `map_against`
 /// for CRDT/OT can be added without reshaping this trait (DESIGN_NOTES §6).
-pub trait Step: fmt::Debug {
+pub trait Step: fmt::Debug + Send + Sync {
     /// Apply the step, returning the new document or why it failed.
     fn apply(&self, doc: &Node, schema: &Schema) -> Result<Node, StepError>;
 
