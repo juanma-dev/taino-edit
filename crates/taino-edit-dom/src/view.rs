@@ -8,7 +8,7 @@
 use std::cell::Cell;
 
 use taino_edit_core::{DomSpec, Fragment, Node, Schema, Selection, Slice, Transform};
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Document, Element};
 
 use crate::decoration::Decoration;
@@ -36,9 +36,14 @@ pub struct EditorView {
 
 impl EditorView {
     /// Mount `doc` into `root`, marking the latter `contenteditable` and
-    /// replacing any pre-existing children.
+    /// replacing any pre-existing children. Also sets `tabindex="0"` so the
+    /// editor is reachable via the keyboard's Tab focus chain (a11y baseline);
+    /// callers can change it later with [`set_tabindex`](EditorView::set_tabindex).
     pub fn mount(doc: Node, schema: Schema, root: Element) -> Self {
         let _ = root.set_attribute("contenteditable", "true");
+        if !root.has_attribute("tabindex") {
+            let _ = root.set_attribute("tabindex", "0");
+        }
         let document = root
             .owner_document()
             .expect("root element has an owner Document");
@@ -82,6 +87,29 @@ impl EditorView {
     /// The decorations currently applied.
     pub fn decorations(&self) -> &[Decoration] {
         &self.decorations
+    }
+
+    /// Programmatically focus the editor.
+    pub fn focus(&self) -> Result<(), JsValue> {
+        let el: web_sys::HtmlElement = self.root.clone().dyn_into()?;
+        el.focus()
+    }
+
+    /// Whether the editor is the document's active (focused) element.
+    pub fn has_focus(&self) -> bool {
+        let Some(document) = self.root.owner_document() else {
+            return false;
+        };
+        let Some(active) = document.active_element() else {
+            return false;
+        };
+        wasm_bindgen::JsValue::from(active) == wasm_bindgen::JsValue::from(&self.root)
+    }
+
+    /// Override the tab index. Pass `-1` to take the editor out of the Tab
+    /// focus chain (mouse-only); `0` to put it back in normal flow.
+    pub fn set_tabindex(&self, n: i32) {
+        let _ = self.root.set_attribute("tabindex", &n.to_string());
     }
 
     /// Wire this from the host's `compositionstart` event handler.
