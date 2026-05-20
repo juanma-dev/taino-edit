@@ -5,6 +5,8 @@
 //! sync, `MutationObserver`, IME and clipboard land in subsequent units of
 //! Phase 4.
 
+use std::cell::Cell;
+
 use taino_edit_core::{DomSpec, Fragment, Node, Schema, Selection, Slice, Transform};
 use wasm_bindgen::JsValue;
 use web_sys::{Document, Element};
@@ -22,6 +24,11 @@ pub struct EditorView {
     /// itself is "transparent" — its children become the direct children of
     /// the root element.
     children: Vec<ViewDesc>,
+    /// `true` while an IME composition is in progress — adapters wire
+    /// `compositionstart`/`compositionend` to flip it. While set,
+    /// [`read_dom_changes`](EditorView::read_dom_changes) returns `None` so
+    /// transient intermediate-glyph states never trigger transactions.
+    composing: Cell<bool>,
 }
 
 impl EditorView {
@@ -50,7 +57,25 @@ impl EditorView {
             schema,
             doc,
             children,
+            composing: Cell::new(false),
         }
+    }
+
+    /// Wire this from the host's `compositionstart` event handler.
+    pub fn composition_start(&self) {
+        self.composing.set(true);
+    }
+
+    /// Wire this from the host's `compositionend` event handler. The
+    /// committed text is now stable in the DOM, so `read_dom_changes()`
+    /// will once again report changes.
+    pub fn composition_end(&self) {
+        self.composing.set(false);
+    }
+
+    /// Whether an IME composition is in progress.
+    pub fn is_composing(&self) -> bool {
+        self.composing.get()
     }
 
     /// The mounted root element.
@@ -132,7 +157,17 @@ impl EditorView {
     ///
     /// v0.1 reports the first divergent text run. Adapters wire this up
     /// behind a `MutationObserver` so it runs on every browser-side edit.
+    /// During an IME composition (see [`composition_start`]) it returns
+    /// `None` so transient glyph states never produce transactions; the
+    /// host commits the change from the `compositionend` handler after
+    /// calling [`composition_end`].
+    ///
+    /// [`composition_start`]: EditorView::composition_start
+    /// [`composition_end`]: EditorView::composition_end
     pub fn read_dom_changes(&self) -> Option<Transform> {
+        if self.composing.get() {
+            return None;
+        }
         let mut found = None;
         collect_text_changes(&self.children, 0, &mut |desc, doc_pos| {
             if found.is_some() {
