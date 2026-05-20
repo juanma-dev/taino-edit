@@ -1580,6 +1580,7 @@ name = "taino-edit-dom"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "serde_json",
  "taino-edit-core",
  "wasm-bindgen",
  "wasm-bindgen-test",

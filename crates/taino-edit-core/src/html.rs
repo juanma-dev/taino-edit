@@ -71,6 +71,21 @@ impl DomSpec {
         self.attrs.push((name.to_string(), value.into()));
         self
     }
+
+    /// The element tag name.
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    /// The attributes in declaration order.
+    pub fn attrs(&self) -> &[(String, String)] {
+        &self.attrs
+    }
+
+    /// Whether the element holds the node's content (true) or is a void leaf.
+    pub fn content_hole(&self) -> bool {
+        self.content_hole
+    }
 }
 
 /// A parsed HTML element exposed to [`ParseRule`] attribute extractors.
