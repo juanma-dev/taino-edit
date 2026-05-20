@@ -12,9 +12,11 @@
 
 #![warn(missing_docs, rust_2018_idioms)]
 
+pub mod decoration;
 pub mod desc;
 pub mod position_map;
 pub mod view;
 
+pub use decoration::Decoration;
 pub use desc::ViewDesc;
 pub use view::EditorView;

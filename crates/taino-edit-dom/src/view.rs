@@ -11,6 +11,7 @@ use taino_edit_core::{DomSpec, Fragment, Node, Schema, Selection, Slice, Transfo
 use wasm_bindgen::JsValue;
 use web_sys::{Document, Element};
 
+use crate::decoration::Decoration;
 use crate::desc::ViewDesc;
 use crate::position_map::{doc_pos_to_dom, dom_to_doc_pos};
 
@@ -29,6 +30,8 @@ pub struct EditorView {
     /// [`read_dom_changes`](EditorView::read_dom_changes) returns `None` so
     /// transient intermediate-glyph states never trigger transactions.
     composing: Cell<bool>,
+    /// Decorations currently applied on top of the rendered DOM.
+    decorations: Vec<Decoration>,
 }
 
 impl EditorView {
@@ -58,7 +61,27 @@ impl EditorView {
             doc,
             children,
             composing: Cell::new(false),
+            decorations: Vec::new(),
         }
+    }
+
+    /// Replace the set of decorations applied on top of the rendered DOM.
+    /// Previous decorations are removed; new ones are applied. Decorations
+    /// that target positions outside the current document are silently
+    /// skipped.
+    pub fn set_decorations(&mut self, decorations: Vec<Decoration>) {
+        for d in self.decorations.clone() {
+            apply_decoration(&self.children, &d, false);
+        }
+        for d in &decorations {
+            apply_decoration(&self.children, d, true);
+        }
+        self.decorations = decorations;
+    }
+
+    /// The decorations currently applied.
+    pub fn decorations(&self) -> &[Decoration] {
+        &self.decorations
     }
 
     /// Wire this from the host's `compositionstart` event handler.
@@ -342,6 +365,37 @@ fn collect_text_changes(
         }
     }
     pos
+}
+
+// ---- decorations --------------------------------------------------------
+
+fn apply_decoration(children: &[ViewDesc], deco: &Decoration, add: bool) {
+    match deco {
+        Decoration::Node { pos, class } => {
+            if let Some(ViewDesc::Element { dom, .. }) = find_block_at(children, *pos) {
+                let list = dom.class_list();
+                if add {
+                    let _ = list.add_1(class);
+                } else {
+                    let _ = list.remove_1(class);
+                }
+            }
+        }
+    }
+}
+
+fn find_block_at(children: &[ViewDesc], pos: usize) -> Option<&ViewDesc> {
+    let mut cur = 0;
+    for c in children {
+        if pos == cur {
+            return Some(c);
+        }
+        cur += c.node().node_size();
+        if pos < cur {
+            return None;
+        }
+    }
+    None
 }
 
 // ---- diff / patch -------------------------------------------------------
