@@ -6,9 +6,10 @@
 //! `core`/`dom` layers do all the editing work; this crate is the glue that
 //! makes them feel like a normal Leptos component.
 //!
-//! Browser events (`input`, `compositionstart`/`compositionend`, `paste`)
-//! are wired automatically: each one runs the corresponding `EditorView`
-//! method and folds the resulting transform into the state signal.
+//! Browser events (`input`, `compositionstart`/`compositionend`, `paste`,
+//! `selectionchange`) are wired automatically: each one runs the
+//! corresponding `EditorView` method and folds the resulting transform —
+//! or selection update — into the state signal.
 
 #![warn(missing_docs, rust_2018_idioms)]
 
@@ -64,7 +65,19 @@ pub fn TainoEditor(
             return;
         };
         runtime.update_value(|rt| match rt.as_mut() {
-            Some(r) => r.view.update(snapshot.doc().clone()),
+            Some(r) => {
+                r.view.update(snapshot.doc().clone());
+                // Re-sync the DOM selection from state — commands (toolbar
+                // buttons, keymap, input-rules) move the doc selection
+                // without touching the browser, and a no-op `read=write`
+                // here is harmless. We guard against an echo from our own
+                // `selectionchange` handler by setting a flag.
+                if r.view.read_selection() != Some(snapshot.selection()) {
+                    r.applying_selection.set(true);
+                    let _ = r.view.set_selection(snapshot.selection());
+                    r.applying_selection.set(false);
+                }
+            }
             None => {
                 let element: web_sys::Element = div.unchecked_into();
                 let view = EditorView::mount(
@@ -72,8 +85,13 @@ pub fn TainoEditor(
                     snapshot.schema().clone(),
                     element.clone(),
                 );
-                let closures = wire_events(&element, runtime, state);
-                *rt = Some(EditorRuntime { view, closures });
+                let applying = std::rc::Rc::new(std::cell::Cell::new(false));
+                let closures = wire_events(&element, runtime, state, applying.clone());
+                *rt = Some(EditorRuntime {
+                    view,
+                    closures,
+                    applying_selection: applying,
+                });
             }
         });
     });
@@ -91,6 +109,9 @@ struct EditorRuntime {
     view: EditorView,
     #[allow(dead_code)] // kept alive so the listeners they back stay attached.
     closures: Vec<EventCloser>,
+    /// Set while the effect is pushing state's selection into the DOM, so
+    /// the `selectionchange` listener can ignore the resulting echo.
+    applying_selection: std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 /// A `Closure` registered on a DOM target; on drop the listener is removed.
@@ -113,22 +134,31 @@ fn wire_events(
     el: &web_sys::Element,
     runtime: StoredValue<Option<EditorRuntime>, LocalStorage>,
     state: RwSignal<EditorState>,
+    applying_selection: std::rc::Rc<std::cell::Cell<bool>>,
 ) -> Vec<EventCloser> {
     let target: web_sys::EventTarget = el.clone().into();
-    let mut closers = Vec::new();
+    let mut closers: Vec<EventCloser> = Vec::new();
 
-    let mut register =
-        |event: &'static str, closure: Closure<dyn FnMut(web_sys::Event)>| -> Option<()> {
-            target
-                .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
-                .ok()?;
+    fn push_listener(
+        closers: &mut Vec<EventCloser>,
+        target: web_sys::EventTarget,
+        event: &'static str,
+        closure: Closure<dyn FnMut(web_sys::Event)>,
+    ) {
+        if target
+            .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
+            .is_ok()
+        {
             closers.push(EventCloser {
                 event,
-                target: target.clone(),
+                target,
                 closure,
             });
-            Some(())
-        };
+        }
+    }
+    let mut register = |event: &'static str, closure: Closure<dyn FnMut(web_sys::Event)>| {
+        push_listener(&mut closers, target.clone(), event, closure);
+    };
 
     // `input`: text typed or deleted in a text node.
     let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
@@ -183,6 +213,34 @@ fn wire_events(
         }
     });
     register("paste", cb);
+    drop(register); // release `&mut closers` so the doc-target push can borrow it.
+
+    // `selectionchange` only fires on `document`; mirror the browser
+    // selection back into state so toolbar/keymap commands see the right
+    // anchor/head. Drop self-induced echoes from the effect.
+    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+        let doc_target: web_sys::EventTarget = doc.into();
+        let applying = applying_selection.clone();
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            if applying.get() {
+                return;
+            }
+            let Some(Some(sel)) = with_view(runtime, |v| v.read_selection()) else {
+                return;
+            };
+            let cur = state.with_untracked(|s| s.selection());
+            if sel == cur {
+                return;
+            }
+            state.update(|s| {
+                let mut tx = s.tr();
+                tx.set_selection(sel);
+                tx.no_history();
+                *s = s.apply(tx);
+            });
+        });
+        push_listener(&mut closers, doc_target, "selectionchange", cb);
+    }
 
     closers
 }
