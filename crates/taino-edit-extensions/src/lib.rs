@@ -28,6 +28,7 @@ pub mod history;
 pub mod image;
 pub mod italic;
 pub mod link;
+pub mod lists;
 pub mod paragraph;
 pub mod transform_case;
 
@@ -40,6 +41,7 @@ pub use history::{redo_command, undo_command, History};
 pub use image::{insert_image, Image};
 pub use italic::Italic;
 pub use link::{remove_link, set_link, Link};
+pub use lists::{lift_list_item, wrap_in_bullet_list, wrap_in_ordered_list, Lists};
 pub use paragraph::Paragraph;
 pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 
