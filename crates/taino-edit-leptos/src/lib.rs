@@ -190,8 +190,8 @@ fn wire_events(
         });
         register("compositionend", cb);
 
-        // Paste: prefer HTML, fall back to plain text; both go through the
-        // schema's strict sanitiser in core.
+        // Paste: prefer Markdown (when advertised), then HTML, then plain
+        // text. All three go through the schema-aware sanitisers in core.
         let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
             let Ok(clip) = ev.dyn_into::<web_sys::ClipboardEvent>() else {
                 return;
@@ -200,10 +200,13 @@ fn wire_events(
             let Some(data) = clip.clipboard_data() else {
                 return;
             };
+            let md = data.get_data("text/markdown").unwrap_or_default();
             let html = data.get_data("text/html").unwrap_or_default();
             let text = data.get_data("text/plain").unwrap_or_default();
             let transform = with_view(runtime, |v| {
-                if !html.is_empty() {
+                if !md.is_empty() {
+                    v.paste_markdown(&md)
+                } else if !html.is_empty() {
                     v.paste_html(&html)
                 } else if !text.is_empty() {
                     v.paste_text(&text)

@@ -41,6 +41,7 @@ mod json;
 mod keymap;
 mod map;
 mod mark;
+pub mod markdown;
 mod node;
 mod plugin;
 mod pos;

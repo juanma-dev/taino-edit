@@ -294,6 +294,20 @@ impl EditorView {
         Some(transform)
     }
 
+    /// Paste Markdown at the current DOM selection. The text is parsed
+    /// through [`taino_edit_core::markdown::parse_markdown`] and validated
+    /// against the schema, so unknown constructs are dropped rather than
+    /// breaking the doc. Adapters prefer this over `paste_text` when the
+    /// clipboard advertises `text/markdown`.
+    pub fn paste_markdown(&self, md: &str) -> Option<Transform> {
+        let parsed = taino_edit_core::markdown::parse_markdown(&self.schema, md).ok()?;
+        let (from, to) = self.paste_range()?;
+        let slice = Slice::new(parsed.content().clone(), 0, 0);
+        let mut transform = Transform::new(self.doc.clone());
+        transform.replace(from, to, slice, &self.schema).ok()?;
+        Some(transform)
+    }
+
     /// Extract a [`Slice`] of the document between `from` and `to` — what
     /// adapters dispatch as the "dragged content" on `dragstart`. Returns
     /// `None` if the range is out of bounds.
