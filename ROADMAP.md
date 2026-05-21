@@ -12,9 +12,9 @@ This document is the single source of truth for **what has been done, what is in
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
 | **Current phase**            | 7 — Polish + release prep done; awaiting `cargo publish` |
-| **Last updated**             | 2026-05-15                                               |
+| **Last updated**             | 2026-05-21                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
-| **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
+| **Effort estimate to v0.1**  | 2–4 months full-time solo (~11–15k LOC, excluding tests) |
 | **First framework adapter**  | Leptos                                                   |
 | **License**                  | MIT OR Apache-2.0                                        |
 | **MSRV**                     | 1.80                                                     |
@@ -45,8 +45,8 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 3 — Core: commands, keymap, input rules** (2026-05-19): `Command`/`chain`, selection/mark/block/join commands, `Transform::split`, cross-platform `Keymap` + `base_keymap`, regex `InputRules` (`text_replace`/`textblock_type`/`wrapping`); 27 command/keymap/inputrule tests. `taino-edit-core` is feature-complete for v0.1
 - ✅ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (2026-05-20): `EditorView` with mount + incremental DOM diff/patch; bidirectional `Selection` ↔ `getSelection`; `read_dom_changes()` for typing; IME composition lifecycle; clipboard `paste_text`/`paste_html` (HTML sanitized through `Schema::parse_html`); drag/drop primitives; focus + tabindex; node decorations. **46 wasm_bindgen_test cases pass in headless Chromium 148** via a small patch on `wasm-bindgen-cli` (vendored in `vendor/`) + `scripts/wasm-test.sh`. Adapter-side event wiring (MutationObserver, selectionchange, paste/drop, composition events) lands in Phase 5
 - ✅ **Phase 5 — `taino-edit-leptos` adapter** (2026-05-20): the `<TainoEditor>` component backed by a `RwSignal<EditorState>`; mounts `EditorView` on first reactive tick, patches in place on every change, and wires `input`/`compositionstart`/`compositionend`/`paste` so browser-side edits commit back through the same signal. `examples/basic-leptos/` is `trunk serve`-buildable (Bold/Undo/Redo + editor). 6 wasm_bindgen_test cases run the component through Leptos's CSR runtime in headless Chromium
-- ✅ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (2026-05-21): `Extension` trait + `SchemaAdditions` + `build_schema_with`/`build_keymap_with` helpers. Five built-ins: `Bold`, `Italic`, `Heading` (with `level`), `Paragraph`, `History` (undo/redo via a new `HistoryIntent` transaction tag that `EditorState::apply` resolves through the existing undo/redo machinery). 15 host tests cover schema additions, keymap entries and end-to-end keymap dispatch
-- ✅ **Phase 7 — Polish for v0.1.0** (2026-05-21, code portion): `examples/headless-core` proves the core runs server-side; README rewritten with feature checklist + Leptos usage example; CHANGELOG `[0.1.0]` entry with explicit "Highlights" and "Known limitations" sections. All four CI gates green, **102 host tests + 52 wasm-bindgen-test cases** pass. Only the maintainer-only release steps remain (publish to crates.io, tag, announce)
+- ✅ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (2026-05-21): `Extension` trait + `SchemaAdditions` + `build_schema_with`/`build_keymap_with` helpers. Initially five built-ins (`Bold`, `Italic`, `Heading`, `Paragraph`, `History`) shipped through Phase 6. Then **broadened mid-Phase-7** (2026-05-21) to **12 extensions** so the published v0.1 is something the community can drop into a real project without first writing four extensions themselves: added `Link` (with `set_link`/`remove_link`), `Image` (inline atom), `Align` (text_align on paragraph/heading), `TransformCase` (upper/lower), `Blockquote`, `CodeBlock`, and `Lists` (bullet/ordered + list_item with wrap + lift). All built on the existing schema/command/keymap surface — no `core` API changes were needed for the broader cut. 41 extension tests + a keymap improvement (shift-implicit lookup for symbol keys, so `Mod->` matches Ctrl+Shift+>) covered by their own host tests
+- ✅ **Phase 7 — Polish for v0.1.0** (2026-05-21, code portion): `examples/headless-core` proves the core runs server-side; README rewritten with feature checklist + Leptos usage example; CHANGELOG `[0.1.0]` entry with explicit "Highlights" and "Known limitations" sections. All four CI gates green, **128 host tests + 52 wasm-bindgen-test cases** pass. Also fixed a latent UX bug found while dog-fooding the demo: `<TainoEditor>` now listens for `document.selectionchange` and mirrors the browser selection into `state.selection`, so toolbar buttons that depend on the caret (H1/H2/H3, align, set_link, …) act on the right block. Only the maintainer-only release steps remain (publish to crates.io, tag, announce)
 
 ### In progress
 
@@ -177,9 +177,9 @@ gate and it is green.
 - [~] Example pages under `examples/` — `examples/basic-leptos/` is the v0.1 cut (Bold/Undo/Redo + editor, `trunk serve`-buildable, DoD met). A richer storybook-style multi-page suite is polish for the release-prep pass
 
 ### Phase 6 — `taino-edit-extensions`: the v0.1 extension set
-**Goal:** five extensions that prove the architecture and make the demo non-trivial.
-**Effort:** ~1 week. Estimated LOC: ~0.5–1k.
-**Definition of done:** each extension is a single module exposing a `schema_additions()`, `commands()`, and `keymap_entries()`.
+**Goal:** a complete-enough extension set that the published v0.1 is something you can drop into a real project.
+**Effort:** ~1–2 weeks. Estimated LOC: ~2–3k.
+**Definition of done:** each extension is a single module exposing a `schema_additions()` and `keymap_entries()`, with host tests covering schema additions and the keymap dispatch.
 
 - [x] `Extension` trait + `SchemaAdditions` aggregation type + `build_schema_with` / `build_keymap_with` helpers
 - [x] `bold` — `Mod-b` (`strong` mark, parses `<strong>` and `<b>`)
@@ -187,6 +187,13 @@ gate and it is green.
 - [x] `heading` — h1/h2/h3 with `Mod-Alt-1..3` (`level` attr; parse `h1`/`h2`/`h3`)
 - [x] `paragraph` — base block, `Mod-Alt-0` (`<p>`)
 - [x] `history` — `Mod-z` / `Mod-Shift-z`. Threads through the standard `Command`/`Transaction` pipeline by tagging a `Transaction` with a new `HistoryIntent` that `EditorState::apply` recognises (and resolves to `undo`/`redo` instead of pushing a new history entry)
+- [x] `link` — `<a href title>` mark with `set_link(href, title?)` and `remove_link` commands; no default keymap (the host wires `Mod-k` to a URL prompt)
+- [x] `image` — inline `<img>` atom with `src`/`alt`/`title` attrs and an `insert_image(src, alt?)` command
+- [x] `align` — `text_align` attribute on `paragraph` and `heading`, with `align_left/center/right/justify` commands bound to `Mod-Shift-{l,e,r,j}`; serializes as `style="text-align: …"`
+- [x] `transform_case` — selection-scoped `to_uppercase` / `to_lowercase` commands; no default binding (case shortcuts collide with too many browser/window-manager bindings to ship a default)
+- [x] `blockquote` — `<blockquote>` wrapper bound to `Mod->` (uses the new shift-implicit keymap lookup so symbol-key bindings work on US keyboards)
+- [x] `code_block` — `<pre>` block bound to `` Mod-` ``
+- [x] `lists` — `bullet_list`/`ordered_list`/`list_item` nodes plus `wrap_in_bullet_list` (`Mod-Shift-8`), `wrap_in_ordered_list` (`Mod-Shift-7`), and `lift_list_item` (`Shift-Tab`). Smart Enter and nested-list indent (sink) are deferred to v0.2 — they need a multi-level `split_at_depth` step the v0.1 budget couldn't absorb
 
 ### Phase 7 — Polish and `v0.1.0` release
 **Goal:** publish.
@@ -211,7 +218,8 @@ gate and it is green.
 - 💤 `taino-edit-dioxus` adapter — same dom layer, different reactivity bridge
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
 - 💤 Markdown serializer + parser
-- 💤 Richer extensions: lists, links, images, code blocks, blockquotes, tables (basic)
+- 💤 Smart Enter inside lists (`split_list_item`) + sink/dedent for nested lists; multi-item lift
+- 💤 Richer extensions on top of v0.1's 12: tables, footnotes, mentions, math/KaTeX, embed
 - 💤 `Decoration` API for third-party inline UI (mentions, comments)
 - 💤 Server-side rendering of the initial document (Leptos SSR)
 

@@ -26,12 +26,21 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
 - An idiomatic Leptos component (`<TainoEditor state=signal />`) backed
   by a `RwSignal<EditorState>`, with browser events wired through
   automatically.
-- Five built-in extensions: `Bold`, `Italic`, `Heading`, `Paragraph`,
-  `History` (Mod-z / Mod-Shift-z).
-- 102 host tests + 52 `wasm_bindgen_test` cases in headless Chromium 148.
+- **Twelve** built-in extensions, enough to drop into a real project:
+  inline marks (`Bold`, `Italic`, `Link`), block nodes (`Paragraph`,
+  `Heading` H1–H3, `Blockquote`, `CodeBlock`, the `Lists` trio
+  `BulletList`/`OrderedList`/`ListItem`), inline atoms (`Image`),
+  attribute and selection commands (`Align`, `TransformCase`), and
+  `History` (`Mod-z` / `Mod-Shift-z`).
+- 128 host tests + 52 `wasm_bindgen_test` cases in headless Chromium 148.
 
 ### Known limitations / explicitly deferred to v0.2
 
+- Smart **Enter** inside a list item (`split_list_item`) and sink/dedent
+  for **nested lists** — the wrap and lift primitives are there; the
+  multi-level slice surgery is a v0.2 follow-up.
+- Multi-item `lift_list_item` (v0.1 covers the single-item case
+  cleanly).
 - Generic `Plugin` trait + `PluginKey` typed-state registry — v0.1 ships
   `History` as the only built-in stateful component.
 - Inline (range-level) decorations — node decorations only in v0.1.
@@ -39,6 +48,8 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
 - The Dioxus adapter (placeholder crate is reserved).
 - `loro` CRDT integration behind the `collab` feature flag.
 - Markdown serializer/parser.
+- Richer extensions on top of the v0.1 twelve: tables, footnotes,
+  mentions, math/KaTeX, embed.
 - Counted-range content quantifiers `{n,m}`.
 - Full WCAG accessibility audit (tabindex/focus + contenteditable
   defaults are wired; deeper a11y review is post-1.0).
@@ -137,9 +148,9 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     `build_keymap_with` so adapter consumers can compose extensions on
     top of a user-supplied base schema builder and the platform's
     `base_keymap`.
-  - Built-in extensions: `Bold` (`strong`, `Mod-b`), `Italic` (`em`,
-    `Mod-i`), `Heading` (`level` attr, `Mod-Alt-1..3`), `Paragraph`
-    (`Mod-Alt-0`), `History` (`Mod-z` / `Mod-Shift-z`).
+  - Initial cut (five built-ins): `Bold` (`strong`, `Mod-b`), `Italic`
+    (`em`, `Mod-i`), `Heading` (`level` attr, `Mod-Alt-1..3`),
+    `Paragraph` (`Mod-Alt-0`), `History` (`Mod-z` / `Mod-Shift-z`).
   - Core gains `HistoryIntent` + `Transaction::set_history_intent`; the
     `History` extension tags its undo/redo transactions so
     `EditorState::apply` walks the undo/redo stack instead of pushing
@@ -147,6 +158,40 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     pipeline now handles undo/redo without a special path.
   - `Keymap::add` exposed so extensions can splice bindings on top of
     `base_keymap` without rebuilding it.
+  - **v0.1 broadening (2026-05-21)** — seven additional extensions, all
+    built on the existing schema/command/keymap surface (no `core`
+    architectural changes):
+    - `Link` — `<a href title>` mark with `set_link(href, title?)` and
+      `remove_link` commands (no default binding; the host wires a
+      URL prompt).
+    - `Image` — inline `<img>` atom with `src`/`alt`/`title` attrs and
+      an `insert_image(src, alt?)` command.
+    - `Align` — `text_align` attribute on `paragraph` and `heading`
+      with four commands and bindings `Mod-Shift-{l,e,r,j}`; serializes
+      as `style="text-align: …"`.
+    - `TransformCase` — selection-scoped `to_uppercase` /
+      `to_lowercase` commands.
+    - `Blockquote` — `<blockquote>` wrapper bound to `Mod->`.
+    - `CodeBlock` — `<pre>` block bound to `` Mod-` ``.
+    - `Lists` — `bullet_list` / `ordered_list` / `list_item` nodes,
+      `wrap_in_bullet_list` (`Mod-Shift-8`), `wrap_in_ordered_list`
+      (`Mod-Shift-7`) and `lift_list_item` (`Shift-Tab`).
+  - Keymap improvement to make symbol-key bindings work as users expect:
+    `Keymap::handle` now does a two-pass lookup — exact canonical first,
+    then with Shift stripped when the press key isn't a lowercase ASCII
+    letter — so `Mod->` matches a Ctrl+Shift+> press without spelling
+    out `Shift` in the binding.
+
+- Phase 7 — UX bug fix:
+  - `<TainoEditor>` now registers a `document.selectionchange` listener
+    and folds the browser selection back into `state.selection`. Before
+    this, toolbar buttons that depend on the caret (set_block_type for
+    H1/H2/H3, the new `align_*` and `set_link` commands, …) acted on
+    whatever block was selected at mount time instead of where the user
+    actually clicked. The effect also re-pushes `state.selection` onto
+    the DOM after every state-driven update, so commands that move the
+    caret are reflected visually. Both directions guard against echo
+    loops via an `applying_selection` flag.
 
 [Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.1.0

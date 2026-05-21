@@ -20,7 +20,7 @@ in Phase 7 (polish + publish). Tests pass workspace-wide:
 
 | | |
 |---|---|
-| Host tests | **102** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, extensions) |
+| Host tests | **128** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, and **12 extensions**: bold, italic, heading, paragraph, history, link, image, align, transform_case, blockquote, code_block, lists) |
 | Browser tests | **52** `wasm_bindgen_test` cases in headless Chromium 148 (mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos component + event wiring) |
 
 See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the
@@ -50,15 +50,28 @@ tracks phase progress and what's deferred to v0.2.
   clipboard paste sanitized through the schema, drag-and-drop primitives,
   focus management and node decorations.
 - A first-class **Leptos** adapter: `<TainoEditor state=signal />` mounts
-  the editor, wires every event back through the state signal, and is
-  tested inside the real Leptos CSR runtime.
-- Five built-in **extensions**: `Bold`, `Italic`, `Heading`, `Paragraph`,
-  `History`.
+  the editor, wires every event (including `selectionchange`) back
+  through the state signal, and is tested inside the real Leptos CSR
+  runtime.
+- **Twelve built-in extensions**, enough to drop into a real project:
+  - *Inline marks:* `Bold` (`Mod-b`), `Italic` (`Mod-i`), `Link`
+    (`set_link` / `remove_link` commands; the host wires the URL
+    prompt).
+  - *Block nodes:* `Paragraph` (`Mod-Alt-0`), `Heading` H1–H3
+    (`Mod-Alt-1..3`), `Blockquote` (`Mod->`), `CodeBlock`
+    (`` Mod-` ``), and the `Lists` trio (`BulletList`/`OrderedList`
+    + `ListItem`, `Mod-Shift-8`/`Mod-Shift-7` + `Shift-Tab` to lift).
+  - *Inline atoms:* `Image` (`insert_image` command).
+  - *Attribute / selection commands:* `Align`
+    (`align_left/center/right/justify`, `Mod-Shift-{l,e,r,j}`),
+    `TransformCase` (`to_uppercase` / `to_lowercase`).
+  - *Undo/redo:* `History` (`Mod-z` / `Mod-Shift-z`).
 
 Explicitly deferred to v0.2: generic plugin registry, inline-range
 decorations, a richer per-node `NodeView` trait, the Dioxus adapter,
 `loro` CRDT integration behind a `collab` feature, Markdown
-serializer/parser.
+serializer/parser, smart Enter / nested-list sink (indent) for lists,
+and richer extensions (tables, footnotes, mentions, math).
 
 ## Workspace layout
 

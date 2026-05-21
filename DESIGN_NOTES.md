@@ -62,22 +62,30 @@ Estimates for taino-edit:
 |---|---|---|
 | `core` | 5-7k | 10-12k |
 | `dom` | 2-3k | 4-5k |
-| `extensions` (5-8 basic) | 1.5-2k | 4-6k |
+| `extensions` (12 basic) | 2.5-3k | 4-6k |
 | `leptos` adapter | 0.5-1k | 1-1.5k |
 | `dioxus` adapter | 0.5-1k | 1-1.5k |
-| **Total source (no tests)** | **~10-14k LOC** | **~20-26k LOC** |
+| **Total source (no tests)** | **~11-15k LOC** | **~20-26k LOC** |
 
 Honest time estimate: MVP v0.1 = 2-4 months full-time solo.
 
 **Author context:** this is the second (and final for now) major contribution following `taino-dnd-*`. Scope must therefore be acutely realistic.
 
-**Suggested v0.1 cut to ship something publishable:**
-- `taino-edit-core` (model, transforms, state, history, commands, keymap)
-- `taino-edit-dom` (contenteditable bridge)
-- ONE framework adapter (the one the author uses most)
-- 5 extensions: bold, italic, heading, paragraph, history
+**v0.1 cut (broadened mid-Phase 7 — see ROADMAP for the dated decision):**
 
-The other adapter and richer extensions become open-source contribution surface for the community on top of the published core.
+The original suggested cut was just `Bold / Italic / Heading / Paragraph / History`. While polishing for release, the author chose to **dream bigger** for v0.1 so the community has something they can drop into a real project without first writing four extensions themselves. The published v0.1 ships:
+
+- `taino-edit-core` (model, transforms, state, history, commands, keymap, input rules)
+- `taino-edit-dom` (`contenteditable` bridge: mount, diff/patch, selection sync, IME, paste, drag/drop, focus, decorations)
+- `taino-edit-leptos` adapter (`<TainoEditor>`, browser-side event wiring incl. `selectionchange`)
+- **12 extensions**:
+  - inline marks: `Bold`, `Italic`, `Link`
+  - block nodes: `Paragraph`, `Heading` (H1–H3), `Blockquote`, `CodeBlock`, `BulletList` / `OrderedList` / `ListItem` (Lists)
+  - inline atoms: `Image`
+  - attribute/selection commands: `Align` (text_align on paragraph/heading), `TransformCase` (upper/lower)
+  - undo/redo: `History`
+
+`taino-edit-dioxus` stays a placeholder; richer extensions (tables, footnotes, mentions, mathblock, …), nested-list indent/sink, smart Enter inside list items, generic plugin registry, inline-range decorations and the `loro`-backed `collab` feature are explicit v0.2 surface and remain community-contribution targets on top of the published core.
 
 ## 4. Naming
 
@@ -109,6 +117,7 @@ Alternative considered (rejected, kept simple): `taino-areito` — Areíto being
 | 4 | License | **MIT OR Apache-2.0** dual | Rust ecosystem default; zero friction for downstream consumers |
 | 5 | Repo layout | **Cargo workspace with `crates/` subdir** | Matches tokio/bevy/leptos convention; clean separation for 6 crates |
 | 6 | CRDT (`loro`) integration | **Feature flag `collab`, off by default, not wired in v0.1** | `Step` will be designed to support `map_against(&Step)` so future opt-in doesn't force a `core` refactor |
+| 7 | v0.1 extension breadth | **12 extensions instead of 5** (added 2026-05-21) | The earlier 5-extension cut was a polish-week minimum. A user dropping `taino-edit` into a real project needs lists, links, images and alignment to feel like a real editor — these are small, well-bounded additions (each is ~50–200 LOC) and the schema/command vocabulary already supports them. See `CHANGELOG.md` [0.1.0]. |
 
 ## 7. Locked technical choices
 
