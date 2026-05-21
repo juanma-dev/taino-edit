@@ -1,6 +1,6 @@
 [package]
 name = "taino-edit-dioxus"
-description = "Dioxus adapter for taino-edit. Reserved for v0.2 — placeholder crate, no functionality yet."
+description = "Dioxus adapter for taino-edit, the native-Rust WYSIWYG rich-text editor."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,3 +12,28 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+dioxus = { version = "0.6", default-features = false, features = ["html", "signals", "hooks", "macro"] }
+taino-edit-core = { workspace = true }
+taino-edit-dom = { workspace = true }
+wasm-bindgen = "0.2.121"
+
+[dependencies.web-sys]
+version = "0.3.98"
+features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlDivElement",
+    "Node",
+    "Event",
+    "EventTarget",
+    "KeyboardEvent",
+    "InputEvent",
+    "CompositionEvent",
+    "ClipboardEvent",
+    "DataTransfer",
+]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.71"

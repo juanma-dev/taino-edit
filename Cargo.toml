@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "examples/basic-leptos", "examples/headless-core"]
+members = [
+    "crates/*",
+    "examples/basic-dioxus",
+    "examples/basic-leptos",
+    "examples/headless-core",
+]
 
 [workspace.package]
 version = "0.1.0"
