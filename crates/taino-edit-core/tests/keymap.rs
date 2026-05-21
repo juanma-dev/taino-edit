@@ -150,6 +150,37 @@ fn caret_motion_keys() {
 }
 
 #[test]
+fn shift_is_implicit_for_symbol_keys() {
+    // A binding `"Mod->"` should still match a press whose `key=">"`
+    // carries shift=true (which browsers always send for symbol keys on
+    // US layouts). Letter-key bindings must not be affected.
+    use taino_edit_core::{select_all, Command};
+    let mut km = base_keymap(false);
+    let hit = std::rc::Rc::new(std::cell::Cell::new(false));
+    let h = hit.clone();
+    let cmd: Command = Box::new(move |_, _| {
+        h.set(true);
+        true
+    });
+    km.add("Mod->", cmd);
+
+    let s = schema();
+    let st = EditorState::new(doc(&s, vec!["x"]), s.clone());
+    assert!(
+        km.handle(&st, &KeyPress::key(">").ctrl().shift(), None),
+        "Mod-> must match a Ctrl+Shift+> press"
+    );
+    assert!(hit.get(), "the bound command must have run");
+
+    // Sanity: a lowercase letter binding is NOT promoted via shift-strip
+    // (Mod-Shift-z must stay distinct from Mod-z).
+    let mut km = base_keymap(false);
+    km.add("Mod-z", Box::new(select_all));
+    assert!(km.handle(&st, &KeyPress::key("z").ctrl(), None));
+    assert!(!km.handle(&st, &KeyPress::key("Z").ctrl().shift(), None));
+}
+
+#[test]
 fn unknown_key_is_unhandled() {
     let s = schema();
     let km = base_keymap(false);

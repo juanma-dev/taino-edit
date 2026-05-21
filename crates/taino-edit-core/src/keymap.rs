@@ -136,16 +136,29 @@ impl Keymap {
 
     /// Handle a key press. Returns whether a binding matched (and ran, if a
     /// dispatch was given and the command applied).
+    ///
+    /// Lookup is two-pass: first the exact canonical form, then — if shift
+    /// was held and the key isn't a lowercase ASCII letter — the same form
+    /// with shift stripped. That mirrors the browser convention where a
+    /// key like `>` or `?` is always produced with Shift, so a binding
+    /// like `"Mod->"` shouldn't have to spell out `Shift`.
     pub fn handle(
         &self,
         state: &EditorState,
         press: &KeyPress,
-        dispatch: Option<&mut Dispatch<'_>>,
+        mut dispatch: Option<&mut Dispatch<'_>>,
     ) -> bool {
-        match self.bindings.get(&press.canonical()) {
-            Some(cmd) => cmd(state, dispatch),
-            None => false,
+        if let Some(cmd) = self.bindings.get(&press.canonical()) {
+            return cmd(state, dispatch.as_deref_mut());
         }
+        if press.shift && shift_is_implicit(&press.key) {
+            let mut alt = press.clone();
+            alt.shift = false;
+            if let Some(cmd) = self.bindings.get(&alt.canonical()) {
+                return cmd(state, dispatch);
+            }
+        }
+        false
     }
 
     /// Add or replace a binding by its `Mod-`-using key spec (e.g.
@@ -164,6 +177,18 @@ impl Keymap {
     /// Whether the keymap has no bindings.
     pub fn is_empty(&self) -> bool {
         self.bindings.is_empty()
+    }
+}
+
+/// Whether shift on `key` is implied (and can be stripped during lookup).
+/// True for single-character keys that are not lowercase ASCII letters —
+/// symbols (`>` `?` `:` …) require shift to produce on most layouts, and
+/// uppercase letters (`Z`) likewise implicitly carry shift.
+fn shift_is_implicit(key: &str) -> bool {
+    let mut chars = key.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => !c.is_ascii_lowercase(),
+        _ => false,
     }
 }
 

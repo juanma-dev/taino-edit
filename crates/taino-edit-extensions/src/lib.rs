@@ -20,6 +20,7 @@ use taino_edit_core::{
 };
 
 pub mod align;
+pub mod blockquote;
 pub mod bold;
 pub mod heading;
 pub mod history;
@@ -30,6 +31,7 @@ pub mod paragraph;
 pub mod transform_case;
 
 pub use align::{align_center, align_justify, align_left, align_right, Align};
+pub use blockquote::Blockquote;
 pub use bold::Bold;
 pub use heading::Heading;
 pub use history::{redo_command, undo_command, History};
