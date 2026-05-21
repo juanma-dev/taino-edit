@@ -42,6 +42,7 @@ mod keymap;
 mod map;
 mod mark;
 mod node;
+mod plugin;
 mod pos;
 mod replace;
 mod schema;
@@ -68,6 +69,7 @@ pub use keymap::{base_keymap, KeyPress, Keymap};
 pub use map::{MapResult, Mapping, StepMap, DEL_SIDE};
 pub use mark::{same_mark_set, Mark, MarkType};
 pub use node::{Node, NodeType};
+pub use plugin::{Plugin, PluginKey, PluginSet};
 pub use pos::ResolvedPos;
 #[doc(no_inline)]
 pub use regex::Captures;

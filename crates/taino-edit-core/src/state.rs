@@ -8,6 +8,7 @@
 //! editing, which is the v0.1 target.
 
 use crate::node::Node;
+use crate::plugin::{Plugin, PluginKey, PluginSet, PluginStates};
 use crate::schema::Schema;
 use crate::selection::Selection;
 use crate::step::{Step, StepError};
@@ -98,16 +99,30 @@ pub struct EditorState {
     selection: Selection,
     schema: Schema,
     history: History,
+    plugins: PluginStates,
 }
 
 impl EditorState {
     /// A fresh state for `doc`, caret at the document start.
     pub fn new(doc: Node, schema: Schema) -> Self {
-        EditorState {
+        Self::with_plugins(doc, schema, PluginSet::new())
+    }
+
+    /// A fresh state pre-loaded with a [`PluginSet`]. Each plugin's
+    /// [`Plugin::init`] is called with the (partially-initialised) state,
+    /// so plugins can derive their initial value from the doc.
+    pub fn with_plugins(doc: Node, schema: Schema, plugins: PluginSet) -> Self {
+        let seed = EditorState {
             doc,
             selection: Selection::caret(0),
             schema,
             history: History::default(),
+            plugins: PluginStates::default(),
+        };
+        let plugin_states = PluginStates::from_set(plugins, &seed);
+        EditorState {
+            plugins: plugin_states,
+            ..seed
         }
     }
 
@@ -115,6 +130,12 @@ impl EditorState {
     pub fn with_history(mut self, history: History) -> Self {
         self.history = history;
         self
+    }
+
+    /// Borrow this state's plugin value (returns `None` if no plugin
+    /// of type `P` was registered when the state was built).
+    pub fn plugin<P: Plugin>(&self, _key: PluginKey<P>) -> Option<&P::State> {
+        self.plugins.get::<P>()
     }
 
     /// The current document.
@@ -182,11 +203,15 @@ impl EditorState {
             }
         }
 
+        // Fold plugin states forward against the just-applied tx.
+        let plugins = self.plugins.apply(&tx, self);
+
         EditorState {
             doc: new_doc,
             selection,
             schema: self.schema.clone(),
             history,
+            plugins,
         }
     }
 
@@ -202,6 +227,7 @@ impl EditorState {
             selection: entry.selection_before,
             schema: self.schema.clone(),
             history,
+            plugins: self.plugins.clone(),
         })
     }
 
@@ -217,6 +243,7 @@ impl EditorState {
             selection: entry.selection_after,
             schema: self.schema.clone(),
             history,
+            plugins: self.plugins.clone(),
         })
     }
 }
