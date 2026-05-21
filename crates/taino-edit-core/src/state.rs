@@ -142,13 +142,23 @@ impl EditorState {
             selection_set: false,
             add_to_history: true,
             join: false,
+            history_intent: None,
         }
     }
 
     /// Apply `tx`, returning the next state. Selection is mapped through the
     /// transaction unless the transaction set one explicitly; a changing,
-    /// history-tracked transaction records an undo group.
+    /// history-tracked transaction records an undo group. Transactions
+    /// carrying a [`HistoryIntent`] resolve to [`undo`](Self::undo) /
+    /// [`redo`](Self::redo) on this state (and never push another history
+    /// entry); if the stack is empty the current state is returned unchanged.
     pub fn apply(&self, tx: Transaction) -> EditorState {
+        if let Some(intent) = tx.history_intent {
+            return match intent {
+                HistoryIntent::Undo => self.undo().unwrap_or_else(|| self.clone()),
+                HistoryIntent::Redo => self.redo().unwrap_or_else(|| self.clone()),
+            };
+        }
         let new_doc = tx.tr.doc().clone();
         let selection = if tx.selection_set {
             tx.selection
@@ -211,6 +221,16 @@ impl EditorState {
     }
 }
 
+/// Whether a transaction is asking the state to walk its undo/redo stack
+/// instead of applying steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryIntent {
+    /// Undo the most recent done group.
+    Undo,
+    /// Redo the most recently undone group.
+    Redo,
+}
+
 /// A pending change: a [`Transform`] plus selection and history intent.
 #[derive(Debug, Clone)]
 pub struct Transaction {
@@ -219,6 +239,7 @@ pub struct Transaction {
     selection_set: bool,
     add_to_history: bool,
     join: bool,
+    history_intent: Option<HistoryIntent>,
 }
 
 impl Transaction {
@@ -256,5 +277,18 @@ impl Transaction {
     /// Whether the document was changed.
     pub fn doc_changed(&self) -> bool {
         self.tr.doc_changed()
+    }
+
+    /// Tag this transaction so [`EditorState::apply`] walks the undo/redo
+    /// stack instead of applying steps. Used by the History extension's
+    /// commands to dispatch through the normal `Command`/`Dispatch` pipeline.
+    pub fn set_history_intent(&mut self, intent: HistoryIntent) -> &mut Self {
+        self.history_intent = Some(intent);
+        self
+    }
+
+    /// The history intent on this transaction, if any.
+    pub fn history_intent(&self) -> Option<HistoryIntent> {
+        self.history_intent
     }
 }

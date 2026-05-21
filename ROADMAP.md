@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 6 — `taino-edit-extensions` (Phase 5 done)               |
+| **Current phase**            | 7 — Polish and `v0.1.0` release (Phase 6 done)           |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -45,14 +45,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 3 — Core: commands, keymap, input rules** (2026-05-19): `Command`/`chain`, selection/mark/block/join commands, `Transform::split`, cross-platform `Keymap` + `base_keymap`, regex `InputRules` (`text_replace`/`textblock_type`/`wrapping`); 27 command/keymap/inputrule tests. `taino-edit-core` is feature-complete for v0.1
 - ✅ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (2026-05-20): `EditorView` with mount + incremental DOM diff/patch; bidirectional `Selection` ↔ `getSelection`; `read_dom_changes()` for typing; IME composition lifecycle; clipboard `paste_text`/`paste_html` (HTML sanitized through `Schema::parse_html`); drag/drop primitives; focus + tabindex; node decorations. **46 wasm_bindgen_test cases pass in headless Chromium 148** via a small patch on `wasm-bindgen-cli` (vendored in `vendor/`) + `scripts/wasm-test.sh`. Adapter-side event wiring (MutationObserver, selectionchange, paste/drop, composition events) lands in Phase 5
 - ✅ **Phase 5 — `taino-edit-leptos` adapter** (2026-05-20): the `<TainoEditor>` component backed by a `RwSignal<EditorState>`; mounts `EditorView` on first reactive tick, patches in place on every change, and wires `input`/`compositionstart`/`compositionend`/`paste` so browser-side edits commit back through the same signal. `examples/basic-leptos/` is `trunk serve`-buildable (Bold/Undo/Redo + editor). 6 wasm_bindgen_test cases run the component through Leptos's CSR runtime in headless Chromium
+- ✅ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (2026-05-21): `Extension` trait + `SchemaAdditions` + `build_schema_with`/`build_keymap_with` helpers. Five built-ins: `Bold`, `Italic`, `Heading` (with `level`), `Paragraph`, `History` (undo/redo via a new `HistoryIntent` transaction tag that `EditorState::apply` resolves through the existing undo/redo machinery). 15 host tests cover schema additions, keymap entries and end-to-end keymap dispatch
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 6 begins next session)*
+- 🚧 *(nothing yet — Phase 7 begins next session)*
 
 ### Up next
 
-- ⏳ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (target: ~1 week)
+- ⏳ **Phase 7 — Polish and `v0.1.0` release** (target: 1–2 weeks)
 
 ---
 
@@ -179,11 +180,12 @@ gate and it is green.
 **Effort:** ~1 week. Estimated LOC: ~0.5–1k.
 **Definition of done:** each extension is a single module exposing a `schema_additions()`, `commands()`, and `keymap_entries()`.
 
-- [ ] `bold` — `Mod-b`
-- [ ] `italic` — `Mod-i`
-- [ ] `heading` — h1/h2/h3 with `Mod-Alt-1..3`
-- [ ] `paragraph` — base block, `Mod-Alt-0`
-- [ ] `history` — re-exports core history plugin with default keymap (`Mod-z`, `Mod-Shift-z`)
+- [x] `Extension` trait + `SchemaAdditions` aggregation type + `build_schema_with` / `build_keymap_with` helpers
+- [x] `bold` — `Mod-b` (`strong` mark, parses `<strong>` and `<b>`)
+- [x] `italic` — `Mod-i` (`em` mark, parses `<em>` and `<i>`)
+- [x] `heading` — h1/h2/h3 with `Mod-Alt-1..3` (`level` attr; parse `h1`/`h2`/`h3`)
+- [x] `paragraph` — base block, `Mod-Alt-0` (`<p>`)
+- [x] `history` — `Mod-z` / `Mod-Shift-z`. Threads through the standard `Command`/`Transaction` pipeline by tagging a `Transaction` with a new `HistoryIntent` that `EditorState::apply` recognises (and resolves to `undo`/`redo` instead of pushing a new history entry)
 
 ### Phase 7 — Polish and `v0.1.0` release
 **Goal:** publish.

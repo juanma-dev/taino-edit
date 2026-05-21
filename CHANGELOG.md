@@ -90,4 +90,20 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - 6 wasm_bindgen_test cases drive the component through Leptos's CSR
     runtime in headless Chromium 148.
 
+- Phase 6 — `taino-edit-extensions`:
+  - `Extension` trait + `SchemaAdditions` + helpers `build_schema_with`,
+    `build_keymap_with` so adapter consumers can compose extensions on
+    top of a user-supplied base schema builder and the platform's
+    `base_keymap`.
+  - Built-in extensions: `Bold` (`strong`, `Mod-b`), `Italic` (`em`,
+    `Mod-i`), `Heading` (`level` attr, `Mod-Alt-1..3`), `Paragraph`
+    (`Mod-Alt-0`), `History` (`Mod-z` / `Mod-Shift-z`).
+  - Core gains `HistoryIntent` + `Transaction::set_history_intent`; the
+    `History` extension tags its undo/redo transactions so
+    `EditorState::apply` walks the undo/redo stack instead of pushing
+    a new history entry — the standard `Command` / `Transaction`
+    pipeline now handles undo/redo without a special path.
+  - `Keymap::add` exposed so extensions can splice bindings on top of
+    `base_keymap` without rebuilding it.
+
 [Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main
