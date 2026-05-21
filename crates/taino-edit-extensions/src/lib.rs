@@ -19,6 +19,7 @@ use taino_edit_core::{
     base_keymap, Command, Keymap, MarkSpec, NodeSpec, Schema, SchemaBuilder, SchemaError,
 };
 
+pub mod align;
 pub mod bold;
 pub mod heading;
 pub mod history;
@@ -27,6 +28,7 @@ pub mod italic;
 pub mod link;
 pub mod paragraph;
 
+pub use align::{align_center, align_justify, align_left, align_right, Align};
 pub use bold::Bold;
 pub use heading::Heading;
 pub use history::{redo_command, undo_command, History};

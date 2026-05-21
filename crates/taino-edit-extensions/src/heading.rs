@@ -8,6 +8,7 @@ use taino_edit_core::{
     Schema,
 };
 
+use crate::align::{align_attrs_for_dom, parse_align_attrs, text_align_attr_spec};
 use crate::{Extension, SchemaAdditions};
 
 /// The heading extension. Adds the `heading` node (with a `level` attr,
@@ -15,14 +16,19 @@ use crate::{Extension, SchemaAdditions};
 /// [`set_block_type`] with the matching level.
 pub struct Heading;
 
-fn h1_attrs(_: &HtmlElement) -> Option<Attrs> {
-    Some(level_attrs(1))
+fn h_attrs(el: &HtmlElement, level: u64) -> Option<Attrs> {
+    let mut a = parse_align_attrs(el);
+    a.insert("level".to_string(), AttrValue::from(level));
+    Some(a)
 }
-fn h2_attrs(_: &HtmlElement) -> Option<Attrs> {
-    Some(level_attrs(2))
+fn h1_attrs(el: &HtmlElement) -> Option<Attrs> {
+    h_attrs(el, 1)
 }
-fn h3_attrs(_: &HtmlElement) -> Option<Attrs> {
-    Some(level_attrs(3))
+fn h2_attrs(el: &HtmlElement) -> Option<Attrs> {
+    h_attrs(el, 2)
+}
+fn h3_attrs(el: &HtmlElement) -> Option<Attrs> {
+    h_attrs(el, 3)
 }
 
 fn level_attrs(level: u64) -> Attrs {
@@ -44,6 +50,7 @@ impl Extension for Heading {
                 default: Some(AttrValue::from(1u64)),
             },
         );
+        attrs.insert("text_align".to_string(), text_align_attr_spec());
         SchemaAdditions {
             nodes: vec![(
                 "heading".to_string(),
@@ -53,7 +60,11 @@ impl Extension for Heading {
                     attrs,
                     to_dom: Some(|n| {
                         let level = n.attrs().get("level").and_then(|v| v.as_u64()).unwrap_or(1);
-                        DomSpec::element(&format!("h{level}"))
+                        let mut spec = DomSpec::element(&format!("h{level}"));
+                        if let Some(style) = align_attrs_for_dom(n.attrs()) {
+                            spec = spec.attr("style", style);
+                        }
+                        spec
                     }),
                     parse_dom: vec![
                         ParseRule::with_attrs("h1", h1_attrs),
