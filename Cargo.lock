@@ -109,6 +109,8 @@ name = "basic-leptos"
 version = "0.0.0"
 dependencies = [
  "leptos",
+ "serde_json",
+ "taino-edit-extensions",
  "taino-edit-leptos",
 ]
 

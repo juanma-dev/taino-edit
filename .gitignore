@@ -28,3 +28,6 @@ node_modules/
 # Local browser-test toolchain (not committed)
 /.tools/
 /webdriver.json
+
+# trunk build output (examples/*/dist/)
+**/dist/
