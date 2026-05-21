@@ -8,6 +8,21 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+Target: **v0.2.0** — closing the v0.1 gaps and broadening the platform.
+
+Planned work:
+
+- List UX completion: smart Enter inside list items (`split_list_item`),
+  sink/dedent for nested lists (`sink_list_item`), multi-item
+  `lift_list_item`.
+- Generic `Plugin` trait + `PluginKey` typed-state registry in `core`;
+  `History` migrated onto it as the canonical example.
+- Markdown serializer + parser (`taino-edit-core::markdown`), with the
+  DOM bridge able to accept `text/markdown` on paste.
+- A real `taino-edit-dioxus` adapter on top of the shared `dom` layer.
+
+See [`ROADMAP.md`](ROADMAP.md) for the phased plan.
+
 ## [0.1.0] - 2026-05-21
 
 The first publishable release of taino-edit. A pure-Rust ProseMirror-style

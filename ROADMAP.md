@@ -205,20 +205,52 @@ gate and it is green.
 - [x] Crate-level rustdoc: every public item documented (`#![warn(missing_docs)]` + CI `cargo doc -D warnings` enforce it); `core`, `dom`, `leptos`, and `extensions` each carry a working module-level example
 - [~] `README.md` upgrade — feature checklist + usage example landed; a screenshot/GIF is the one remaining nice-to-have (live demo is in `examples/basic-leptos`)
 - [x] `CHANGELOG.md` v0.1.0 entry (with `Highlights` and `Known limitations / explicitly deferred to v0.2` sections)
-- [ ] **Publish to crates.io** in dependency order: `core` → `extensions` → `dom` → `leptos` → umbrella _(maintainer-only step)_
-- [ ] **Tag `v0.1.0`**, GitHub Release pointing at the CHANGELOG _(maintainer-only step)_
-- [ ] **Announce**: r/rust, This Week in Rust, Leptos Discord _(maintainer-only step)_
+- [x] **Publish to crates.io** in dependency order — done 2026-05-21 (6 crates, v0.1.0)
+- [x] **Tag `v0.1.0`** + GitHub Release pointing at the CHANGELOG — done 2026-05-21
+- [~] **Announce** — TWiR / r/rust / Leptos Discord pending the maintainer (drafts staged)
 
 ---
 
-## Deferred (v0.2+)
+## v0.2 — In progress (started 2026-05-21)
 
-- 💤 Generic `Plugin` trait + `PluginKey` typed-state registry — v0.1 ships `History` as the one built-in stateful component; the multi-plugin dispatch generalisation lands here
+**Goal:** close the visible v0.1 gaps + broaden the platform so third parties can ship richer extensions without forking `core`.
+
+### Phase 1 — List UX completion
+
+- [ ] `split_list_item` command (multi-depth split: paragraph + list_item)
+- [ ] `sink_list_item` command (Tab to indent, nesting the current item into the previous sibling)
+- [ ] Multi-item `lift_list_item` via `ReplaceAroundStep`
+- [ ] Wire smart Enter (chain: split → lift-if-empty) and Tab in the `Lists` keymap
+
+### Phase 2 — Plugin trait + PluginKey
+
+- [ ] `Plugin` trait with associated `State` type, `apply(&Transaction)` hook
+- [ ] `PluginKey<T: Plugin>` for typed lookup of plugin state
+- [ ] `EditorState` holds a typed-erased map of plugin states
+- [ ] Migrate `History` onto the new trait (back-compat preserved through the existing `HistoryIntent` path)
+
+### Phase 3 — Markdown serializer / parser
+
+- [ ] `taino-edit-core::markdown::to_markdown(doc)` walks the tree to a CommonMark-subset string
+- [ ] `taino-edit-core::markdown::parse_markdown(schema, md)` returns a schema-valid `Node` (uses `pulldown-cmark` for tokenization)
+- [ ] DOM bridge: accept `text/markdown` on paste, fall back to current behaviour
+
+### Phase 4 — Dioxus adapter
+
+- [ ] `taino-edit-dioxus::TainoEditor` component backed by Dioxus's reactive model
+- [ ] `examples/basic-dioxus` mirrors `examples/basic-leptos`
+- [ ] Headless-Chromium browser tests for the Dioxus mount + event wiring
+
+### Release
+
+- [ ] Bump workspace version to 0.2.0; refresh all docs; full gate sweep; `cargo publish` all 6 crates; tag `v0.2.0`; GitHub Release.
+
+---
+
+## Deferred (v0.3+)
+
 - 💤 `schema!{}` proc-macro DSL — sugar over the v0.1 builder
-- 💤 `taino-edit-dioxus` adapter — same dom layer, different reactivity bridge
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
-- 💤 Markdown serializer + parser
-- 💤 Smart Enter inside lists (`split_list_item`) + sink/dedent for nested lists; multi-item lift
 - 💤 Richer extensions on top of v0.1's 12: tables, footnotes, mentions, math/KaTeX, embed
 - 💤 `Decoration` API for third-party inline UI (mentions, comments)
 - 💤 Server-side rendering of the initial document (Leptos SSR)
