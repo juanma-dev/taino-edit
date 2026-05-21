@@ -8,6 +8,41 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-21
+
+The first publishable release of taino-edit. A pure-Rust ProseMirror-style
+WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
+
+### Highlights
+
+- Framework-agnostic typed document model + invertible transforms +
+  bounded undo/redo, all in pure-Rust `taino-edit-core`.
+- Schema-checked JSON and HTML round-trip; the HTML parser is strict,
+  dependency-free and depth-bounded — untrusted clipboard content
+  cannot inject markup.
+- A real `contenteditable` DOM bridge with diff/patch, bidirectional
+  selection sync, IME composition, sanitized paste, drag/drop primitives,
+  focus management and node decorations.
+- An idiomatic Leptos component (`<TainoEditor state=signal />`) backed
+  by a `RwSignal<EditorState>`, with browser events wired through
+  automatically.
+- Five built-in extensions: `Bold`, `Italic`, `Heading`, `Paragraph`,
+  `History` (Mod-z / Mod-Shift-z).
+- 102 host tests + 52 `wasm_bindgen_test` cases in headless Chromium 148.
+
+### Known limitations / explicitly deferred to v0.2
+
+- Generic `Plugin` trait + `PluginKey` typed-state registry — v0.1 ships
+  `History` as the only built-in stateful component.
+- Inline (range-level) decorations — node decorations only in v0.1.
+- A richer per-node `NodeView` trait with imperative DOM hooks.
+- The Dioxus adapter (placeholder crate is reserved).
+- `loro` CRDT integration behind the `collab` feature flag.
+- Markdown serializer/parser.
+- Counted-range content quantifiers `{n,m}`.
+- Full WCAG accessibility audit (tabindex/focus + contenteditable
+  defaults are wired; deeper a11y review is post-1.0).
+
 ### Added
 
 - Phase 0 — Cargo workspace scaffold and CI baseline:
@@ -90,6 +125,13 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - 6 wasm_bindgen_test cases drive the component through Leptos's CSR
     runtime in headless Chromium 148.
 
+- Phase 7 — polish for the v0.1.0 release:
+  - `examples/headless-core/` — a CLI/server-side demo that proves
+    `taino-edit-core` runs identically without any DOM (compose schema,
+    edit through `Transform`, JSON + HTML round-trip, command + undo).
+  - README rewritten to reflect the actual feature set, test counts and
+    explicitly-deferred items.
+
 - Phase 6 — `taino-edit-extensions`:
   - `Extension` trait + `SchemaAdditions` + helpers `build_schema_with`,
     `build_keymap_with` so adapter consumers can compose extensions on
@@ -106,4 +148,5 @@ Pre-1.0, minor version bumps may include breaking API changes.
   - `Keymap::add` exposed so extensions can splice bindings on top of
     `base_keymap` without rebuilding it.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/commits/main
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.1.0

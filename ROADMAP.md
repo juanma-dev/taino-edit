@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 7 — Polish and `v0.1.0` release (Phase 6 done)           |
+| **Current phase**            | 7 — Polish + release prep done; awaiting `cargo publish` |
 | **Last updated**             | 2026-05-15                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP                               |
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~10–14k LOC, excluding tests) |
@@ -46,14 +46,15 @@ This document is the single source of truth for **what has been done, what is in
 - ✅ **Phase 4 — `taino-edit-dom`: the contenteditable bridge** (2026-05-20): `EditorView` with mount + incremental DOM diff/patch; bidirectional `Selection` ↔ `getSelection`; `read_dom_changes()` for typing; IME composition lifecycle; clipboard `paste_text`/`paste_html` (HTML sanitized through `Schema::parse_html`); drag/drop primitives; focus + tabindex; node decorations. **46 wasm_bindgen_test cases pass in headless Chromium 148** via a small patch on `wasm-bindgen-cli` (vendored in `vendor/`) + `scripts/wasm-test.sh`. Adapter-side event wiring (MutationObserver, selectionchange, paste/drop, composition events) lands in Phase 5
 - ✅ **Phase 5 — `taino-edit-leptos` adapter** (2026-05-20): the `<TainoEditor>` component backed by a `RwSignal<EditorState>`; mounts `EditorView` on first reactive tick, patches in place on every change, and wires `input`/`compositionstart`/`compositionend`/`paste` so browser-side edits commit back through the same signal. `examples/basic-leptos/` is `trunk serve`-buildable (Bold/Undo/Redo + editor). 6 wasm_bindgen_test cases run the component through Leptos's CSR runtime in headless Chromium
 - ✅ **Phase 6 — `taino-edit-extensions`: the v0.1 extension set** (2026-05-21): `Extension` trait + `SchemaAdditions` + `build_schema_with`/`build_keymap_with` helpers. Five built-ins: `Bold`, `Italic`, `Heading` (with `level`), `Paragraph`, `History` (undo/redo via a new `HistoryIntent` transaction tag that `EditorState::apply` resolves through the existing undo/redo machinery). 15 host tests cover schema additions, keymap entries and end-to-end keymap dispatch
+- ✅ **Phase 7 — Polish for v0.1.0** (2026-05-21, code portion): `examples/headless-core` proves the core runs server-side; README rewritten with feature checklist + Leptos usage example; CHANGELOG `[0.1.0]` entry with explicit "Highlights" and "Known limitations" sections. All four CI gates green, **102 host tests + 52 wasm-bindgen-test cases** pass. Only the maintainer-only release steps remain (publish to crates.io, tag, announce)
 
 ### In progress
 
-- 🚧 *(nothing yet — Phase 7 begins next session)*
+- 🚧 *(nothing yet — release is the maintainer's hand-off)*
 
 ### Up next
 
-- ⏳ **Phase 7 — Polish and `v0.1.0` release** (target: 1–2 weeks)
+- ⏳ **Release `v0.1.0`** — `cargo publish` in dependency order, tag `v0.1.0`, post the GitHub Release and the announcements
 
 ---
 
@@ -192,14 +193,14 @@ gate and it is green.
 **Effort:** 1–2 weeks.
 **Definition of done:** all 6 crates on crates.io, docs.rs builds clean, `examples/basic-leptos` runs from a fresh checkout.
 
-- [ ] `examples/basic-leptos` — full editor demo using `cargo-leptos`/`trunk`
-- [ ] `examples/headless-core` — server-side document manipulation, no DOM
-- [ ] Crate-level rustdoc: every public item documented, examples in `core`
-- [ ] `README.md` upgrade with screenshot/GIF and feature checklist
-- [ ] `CHANGELOG.md` v0.1.0 entry
-- [ ] Publish to crates.io in dependency order: `core` → `extensions` → `dom` → `leptos` → umbrella
-- [ ] Tag `v0.1.0`, GitHub Release with highlights and known limitations
-- [ ] Announce: r/rust, This Week in Rust, Leptos Discord
+- [x] `examples/basic-leptos` — full editor demo using `trunk` (built in Phase 5)
+- [x] `examples/headless-core` — server-side document manipulation, no DOM
+- [x] Crate-level rustdoc: every public item documented (`#![warn(missing_docs)]` + CI `cargo doc -D warnings` enforce it); `core`, `dom`, `leptos`, and `extensions` each carry a working module-level example
+- [~] `README.md` upgrade — feature checklist + usage example landed; a screenshot/GIF is the one remaining nice-to-have (live demo is in `examples/basic-leptos`)
+- [x] `CHANGELOG.md` v0.1.0 entry (with `Highlights` and `Known limitations / explicitly deferred to v0.2` sections)
+- [ ] **Publish to crates.io** in dependency order: `core` → `extensions` → `dom` → `leptos` → umbrella _(maintainer-only step)_
+- [ ] **Tag `v0.1.0`**, GitHub Release pointing at the CHANGELOG _(maintainer-only step)_
+- [ ] **Announce**: r/rust, This Week in Rust, Leptos Discord _(maintainer-only step)_
 
 ---
 

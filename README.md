@@ -6,32 +6,77 @@
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 `taino-edit` is a ProseMirror/TipTap-inspired editor — typed document model,
-invertible transforms, plugins, history — built reactive-first for Rust web
-frameworks. Unlike `leptos-tiptap` (a `wasm-bindgen` wrapper around the
-TypeScript TipTap bundle), there is **no JS dependency at runtime**.
+invertible transforms, history, commands and a Leptos component — built
+reactive-first for Rust web frameworks. Unlike `leptos-tiptap` (a
+`wasm-bindgen` wrapper around the TypeScript TipTap bundle), there is **no
+JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## ⚠️ Status: pre-implementation
+## Status: feature-complete for v0.1, polishing for release
 
-This repository is currently a **workspace scaffold only** (Phase 0). No
-editing functionality exists yet. The architecture and the phased v0.1 plan
-are fully specified — see the design docs below. Do not depend on this crate
-until `v0.1.0` is published.
+All six implementation phases of v0.1 are done; the workspace is currently
+in Phase 7 (polish + publish). Tests pass workspace-wide:
 
-- **[DESIGN_NOTES.md](DESIGN_NOTES.md)** — architecture, scope budget, resolved design decisions
-- **[ROADMAP.md](ROADMAP.md)** — phased v0.1 plan, current status, contribution surfaces
+| | |
+|---|---|
+| Host tests | **102** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, extensions) |
+| Browser tests | **52** `wasm_bindgen_test` cases in headless Chromium 148 (mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos component + event wiring) |
+
+See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the
+scope budget, and the resolved design decisions; **[ROADMAP.md](ROADMAP.md)**
+tracks phase progress and what's deferred to v0.2.
+
+## What ships in v0.1
+
+- A typed, immutable document tree (ProseMirror-style `Node` /
+  `Mark` / `Fragment` / `Slice`).
+- A `Schema` + `SchemaBuilder` with a Thompson-NFA-to-DFA content automaton
+  (`paragraph+`, `(text | image)*`, `+ * ?`).
+- Schema-checked **JSON** round-trip (`Node::to_json` ↔ `Schema::node_from_json`).
+- A dependency-free escaped **HTML** serializer and a strict, depth-bounded
+  HTML parser (rejects unknown tags, can't be tricked into injecting markup).
+- Invertible, mappable **Step**s (`ReplaceStep`, `ReplaceAroundStep`,
+  `AddMark`/`RemoveMark`/`AttrStep`), `Mapping` with mirror/recover, and a
+  `Transform` builder.
+- An `EditorState` with `Selection`, `Transaction`, and a bounded
+  groupable **undo/redo** `History`.
+- A standard command vocabulary (`select_all`, `toggle_mark`,
+  `set_block_type`, `wrap_in`, `lift`, `split_block`, `join_…`, …), a
+  cross-platform `Keymap` (`Mod` = Ctrl/Cmd) and a `base_keymap`.
+- Regex **input rules** (`## ` → heading, `> ` → blockquote, …).
+- A real **`contenteditable` DOM bridge** (`taino-edit-dom`): mount,
+  incremental diff/patch, bidirectional selection sync, IME composition,
+  clipboard paste sanitized through the schema, drag-and-drop primitives,
+  focus management and node decorations.
+- A first-class **Leptos** adapter: `<TainoEditor state=signal />` mounts
+  the editor, wires every event back through the state signal, and is
+  tested inside the real Leptos CSR runtime.
+- Five built-in **extensions**: `Bold`, `Italic`, `Heading`, `Paragraph`,
+  `History`.
+
+Explicitly deferred to v0.2: generic plugin registry, inline-range
+decorations, a richer per-node `NodeView` trait, the Dioxus adapter,
+`loro` CRDT integration behind a `collab` feature, Markdown
+serializer/parser.
 
 ## Workspace layout
 
 | Crate                                                  | Role                                                              |
 | ------------------------------------------------------ | ----------------------------------------------------------------- |
-| [`taino-edit-core`](crates/taino-edit-core)             | Framework-agnostic model, transforms, state, history, commands    |
+| [`taino-edit-core`](crates/taino-edit-core)             | Framework-agnostic model, transforms, state, history, commands, keymap, input rules |
 | [`taino-edit-dom`](crates/taino-edit-dom)               | `contenteditable`/DOM bridge (`web-sys`, `wasm-bindgen`, `js-sys`) |
-| [`taino-edit-extensions`](crates/taino-edit-extensions) | Bold, italic, heading, paragraph, history                         |
-| [`taino-edit-leptos`](crates/taino-edit-leptos)         | Leptos adapter (first-class for v0.1)                              |
-| [`taino-edit-dioxus`](crates/taino-edit-dioxus)         | Placeholder, reserved for v0.2                                     |
+| [`taino-edit-extensions`](crates/taino-edit-extensions) | `Bold`/`Italic`/`Heading`/`Paragraph`/`History`, plus the `Extension` trait |
+| [`taino-edit-leptos`](crates/taino-edit-leptos)         | Leptos adapter (`<TainoEditor>`); first-class for v0.1            |
+| [`taino-edit-dioxus`](crates/taino-edit-dioxus)         | Placeholder, reserved for v0.2                                    |
 | [`taino-edit`](crates/taino-edit)                       | Umbrella crate, feature-gated re-exports                           |
+
+Examples under [`examples/`](examples/):
+
+- [`basic-leptos`](examples/basic-leptos) — a `trunk serve`-buildable demo
+  with Bold/Undo/Redo buttons and a mounted editor.
+- [`headless-core`](examples/headless-core) — server-side / CLI demo
+  proving `taino-edit-core` runs identically without a DOM.
 
 ## Install (once published)
 
@@ -42,17 +87,52 @@ taino-edit = { version = "0.1", features = ["leptos"] }
 
 No adapter is enabled by default — choose `leptos` (or, post-v0.1, `dioxus`).
 
+## Use it (Leptos)
+
+```rust,no_run
+use leptos::prelude::*;
+use taino_edit_leptos::{
+    build_keymap_with, build_schema_with, Bold, DomSpec, EditorState,
+    Italic, NodeSpec, SchemaBuilder, TainoEditor,
+};
+
+#[component]
+fn App() -> impl IntoView {
+    // Compose a schema on top of the universal doc/text primitives.
+    let base = SchemaBuilder::new()
+        .node("doc",  NodeSpec { content: Some("block+".into()),  ..Default::default() })
+        .node("text", NodeSpec { group:   Some("inline".into()),  ..Default::default() });
+    // Paragraph etc. come from `taino-edit-extensions`.
+    let exts: Vec<&dyn taino_edit_extensions::Extension> =
+        vec![&taino_edit_extensions::Paragraph, &Bold, &Italic];
+    let schema = build_schema_with(base, &exts, "doc").unwrap();
+
+    let txt   = schema.text("Hello from Rust!", vec![]).unwrap();
+    let para  = schema.node("paragraph", Default::default(), vec![txt], vec![]).unwrap();
+    let doc   = schema.node("doc",       Default::default(), vec![para], vec![]).unwrap();
+    let state = RwSignal::new(EditorState::new(doc, schema));
+
+    view! { <TainoEditor state=state /> }
+}
+```
+
 ## Build & test
 
 Requires the Rust toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml)
 (stable, MSRV 1.80).
 
 ```sh
-cargo check --workspace
-cargo test --all-features
-cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo doc --no-deps --all-features
 ```
+
+Browser tests for `taino-edit-dom` and `taino-edit-leptos` use a small
+locally-patched `wasm-bindgen-cli`; first time only run
+`./scripts/install-wasm-test-runner.sh`, after that
+`./scripts/wasm-test.sh` runs them in headless Chromium 148. See
+[`vendor/README.md`](vendor/README.md) for the rationale.
 
 ## Contributing
 
