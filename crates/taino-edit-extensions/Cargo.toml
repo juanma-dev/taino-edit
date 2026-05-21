@@ -1,6 +1,6 @@
 [package]
 name = "taino-edit-extensions"
-description = "Standard editing extensions (bold, italic, heading, paragraph, history) for the taino-edit WYSIWYG editor."
+description = "Standard editing extensions (bold, italic, link, paragraph, heading, blockquote, code-block, lists, image, align, transform-case, history) for the taino-edit WYSIWYG editor."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
