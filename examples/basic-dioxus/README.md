@@ -5,6 +5,10 @@ A minimal taino-edit + Dioxus demo proving the framework-agnostic
 
 ## Run
 
+Two ways — pick whichever toolchain you already have.
+
+### Option A: `dx serve` (canonical Dioxus path)
+
 ```sh
 # Once, if you don't have the Dioxus CLI yet:
 cargo install dioxus-cli --locked
@@ -13,7 +17,17 @@ cargo install dioxus-cli --locked
 dx serve
 ```
 
-`dx serve` builds the binary to `wasm32-unknown-unknown` and serves the
+### Option B: `trunk serve` (same toolchain as the Leptos example)
+
+```sh
+# Once, if you don't have trunk yet:
+cargo install --locked trunk
+
+# Then, from this directory:
+trunk serve --open
+```
+
+Either path builds the binary to `wasm32-unknown-unknown` and serves the
 demo at <http://127.0.0.1:8080>.
 
 ## Status
