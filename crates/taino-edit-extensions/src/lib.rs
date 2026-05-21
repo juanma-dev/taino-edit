@@ -23,12 +23,14 @@ pub mod bold;
 pub mod heading;
 pub mod history;
 pub mod italic;
+pub mod link;
 pub mod paragraph;
 
 pub use bold::Bold;
 pub use heading::Heading;
 pub use history::{redo_command, undo_command, History};
 pub use italic::Italic;
+pub use link::{remove_link, set_link, Link};
 pub use paragraph::Paragraph;
 
 /// Node and mark types an extension contributes to the schema.
