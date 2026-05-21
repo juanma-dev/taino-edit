@@ -32,7 +32,7 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
   `BulletList`/`OrderedList`/`ListItem`), inline atoms (`Image`),
   attribute and selection commands (`Align`, `TransformCase`), and
   `History` (`Mod-z` / `Mod-Shift-z`).
-- 128 host tests + 52 `wasm_bindgen_test` cases in headless Chromium 148.
+- 110 host tests + 52 `wasm_bindgen_test` cases in headless Chromium 148.
 
 ### Known limitations / explicitly deferred to v0.2
 

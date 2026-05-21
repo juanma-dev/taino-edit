@@ -109,11 +109,7 @@ fn lists_via_built_keymap_mod_shift_8() {
     let mut next = None;
     {
         let mut d = |tx| next = Some(s.apply(tx));
-        let handled = keymap.handle(
-            &s,
-            &KeyPress::key("8").ctrl().shift(),
-            Some(&mut d),
-        );
+        let handled = keymap.handle(&s, &KeyPress::key("8").ctrl().shift(), Some(&mut d));
         assert!(handled, "Mod-Shift-8 must be bound (bullet list)");
     }
     let s2 = next.expect("dispatch fired");

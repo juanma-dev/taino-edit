@@ -53,7 +53,10 @@ fn link_contributes_mark_with_href_attr() {
     let (name, spec) = &adds.marks[0];
     assert_eq!(name, "link");
     assert!(spec.attrs.contains_key("href"));
-    assert!(!spec.inclusive, "link must NOT extend on typing at its edge");
+    assert!(
+        !spec.inclusive,
+        "link must NOT extend on typing at its edge"
+    );
 }
 
 #[test]
@@ -83,9 +86,11 @@ fn set_link_wraps_selection_in_link_mark() {
     let j = s2.doc().to_json();
     let para = &j["content"][0]["content"];
     let first = &para[0];
-    assert!(first["marks"].as_array().unwrap().iter().any(|m| {
-        m["type"] == "link" && m["attrs"]["href"] == json!("https://example.com")
-    }));
+    assert!(first["marks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| { m["type"] == "link" && m["attrs"]["href"] == json!("https://example.com") }));
 }
 
 #[test]
@@ -113,7 +118,10 @@ fn remove_link_strips_link_marks() {
     let state = s.apply(t);
     let state = run(state, &set_link("https://example.com", None));
     let cmd = remove_link();
-    assert!(cmd(&state, None), "remove_link must apply when a link covers the selection");
+    assert!(
+        cmd(&state, None),
+        "remove_link must apply when a link covers the selection"
+    );
     let state = run(state, &cmd);
     let html = state.doc().to_html();
     assert!(
@@ -130,5 +138,8 @@ fn set_link_caret_only_is_a_noop() {
     let s = s.apply(t);
     let cmd = set_link("https://example.com", None);
     let applies = cmd(&s, None);
-    assert!(!applies, "with no range selected, set_link should not apply");
+    assert!(
+        !applies,
+        "with no range selected, set_link should not apply"
+    );
 }

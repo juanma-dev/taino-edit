@@ -63,7 +63,10 @@ fn to_uppercase_transforms_selection_text() {
 fn to_lowercase_transforms_selection_text() {
     let s = make_state("HELLO WORLD");
     let mut t = s.tr();
-    t.set_selection(Selection::Text { anchor: 1, head: 12 });
+    t.set_selection(Selection::Text {
+        anchor: 1,
+        head: 12,
+    });
     let s = s.apply(t);
 
     let s = run(s, &to_lowercase());

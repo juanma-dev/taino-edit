@@ -22,7 +22,10 @@ pub struct Lists;
 
 fn ordered_list_attrs(el: &HtmlElement) -> Option<Attrs> {
     let mut a = Attrs::new();
-    let start = el.attr("start").and_then(|s| s.parse::<u64>().ok()).unwrap_or(1);
+    let start = el
+        .attr("start")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(1);
     a.insert("start".to_string(), AttrValue::from(start));
     Some(a)
 }
@@ -72,7 +75,8 @@ impl Extension for Lists {
                         group: Some("block".into()),
                         attrs: ordered_attrs,
                         to_dom: Some(|n| {
-                            let start = n.attrs().get("start").and_then(|v| v.as_u64()).unwrap_or(1);
+                            let start =
+                                n.attrs().get("start").and_then(|v| v.as_u64()).unwrap_or(1);
                             let mut spec = DomSpec::element("ol");
                             if start != 1 {
                                 spec = spec.attr("start", start.to_string());

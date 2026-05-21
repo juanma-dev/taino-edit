@@ -100,9 +100,15 @@ fn align_center_sets_text_align_attr_and_style() {
 fn align_left_then_default_round_trip() {
     let s = make_state();
     let s = run(s, &align_right());
-    assert_eq!(s.doc().to_json()["content"][0]["attrs"]["text_align"], json!("right"));
+    assert_eq!(
+        s.doc().to_json()["content"][0]["attrs"]["text_align"],
+        json!("right")
+    );
     let s = run(s, &align_left());
-    assert_eq!(s.doc().to_json()["content"][0]["attrs"]["text_align"], json!("left"));
+    assert_eq!(
+        s.doc().to_json()["content"][0]["attrs"]["text_align"],
+        json!("left")
+    );
     let html = s.doc().to_html();
     assert!(
         html.contains("text-align: left"),
@@ -117,11 +123,7 @@ fn align_via_built_keymap() {
     let mut next = None;
     {
         let mut d = |tx| next = Some(s.apply(tx));
-        let handled = keymap.handle(
-            &s,
-            &KeyPress::key("e").ctrl().shift(),
-            Some(&mut d),
-        );
+        let handled = keymap.handle(&s, &KeyPress::key("e").ctrl().shift(), Some(&mut d));
         assert!(handled, "Mod-Shift-e must be bound (align_center)");
     }
     let s2 = next.expect("dispatch fired");

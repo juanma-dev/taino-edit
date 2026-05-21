@@ -156,64 +156,68 @@ fn wire_events(
             });
         }
     }
-    let mut register = |event: &'static str, closure: Closure<dyn FnMut(web_sys::Event)>| {
-        push_listener(&mut closers, target.clone(), event, closure);
-    };
-
-    // `input`: text typed or deleted in a text node.
-    let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
-        if let Some(Some(transform)) = with_view(runtime, |v| v.read_dom_changes()) {
-            apply_transform(state, &transform);
-        }
-    });
-    register("input", cb);
-
-    // IME composition: suspend reads while composing, commit on end.
-    let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
-        with_view(runtime, |v| v.composition_start());
-    });
-    register("compositionstart", cb);
-
-    let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
-        let transform = with_view(runtime, |v| {
-            v.composition_end();
-            v.read_dom_changes()
-        })
-        .flatten();
-        if let Some(t) = transform {
-            apply_transform(state, &t);
-        }
-    });
-    register("compositionend", cb);
-
-    // Paste: prefer HTML, fall back to plain text; both go through the
-    // schema's strict sanitiser in core.
-    let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
-        let Ok(clip) = ev.dyn_into::<web_sys::ClipboardEvent>() else {
-            return;
+    // Editor-element listeners. Scoped so `register` drops at the closing
+    // brace, releasing the `&mut closers` borrow for the document-target
+    // listener below.
+    {
+        let mut register = |event: &'static str, closure: Closure<dyn FnMut(web_sys::Event)>| {
+            push_listener(&mut closers, target.clone(), event, closure);
         };
-        clip.prevent_default();
-        let Some(data) = clip.clipboard_data() else {
-            return;
-        };
-        let html = data.get_data("text/html").unwrap_or_default();
-        let text = data.get_data("text/plain").unwrap_or_default();
-        let transform = with_view(runtime, |v| {
-            if !html.is_empty() {
-                v.paste_html(&html)
-            } else if !text.is_empty() {
-                v.paste_text(&text)
-            } else {
-                None
+
+        // `input`: text typed or deleted in a text node.
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            if let Some(Some(transform)) = with_view(runtime, |v| v.read_dom_changes()) {
+                apply_transform(state, &transform);
             }
-        })
-        .flatten();
-        if let Some(t) = transform {
-            apply_transform(state, &t);
-        }
-    });
-    register("paste", cb);
-    drop(register); // release `&mut closers` so the doc-target push can borrow it.
+        });
+        register("input", cb);
+
+        // IME composition: suspend reads while composing, commit on end.
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            with_view(runtime, |v| v.composition_start());
+        });
+        register("compositionstart", cb);
+
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            let transform = with_view(runtime, |v| {
+                v.composition_end();
+                v.read_dom_changes()
+            })
+            .flatten();
+            if let Some(t) = transform {
+                apply_transform(state, &t);
+            }
+        });
+        register("compositionend", cb);
+
+        // Paste: prefer HTML, fall back to plain text; both go through the
+        // schema's strict sanitiser in core.
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+            let Ok(clip) = ev.dyn_into::<web_sys::ClipboardEvent>() else {
+                return;
+            };
+            clip.prevent_default();
+            let Some(data) = clip.clipboard_data() else {
+                return;
+            };
+            let html = data.get_data("text/html").unwrap_or_default();
+            let text = data.get_data("text/plain").unwrap_or_default();
+            let transform = with_view(runtime, |v| {
+                if !html.is_empty() {
+                    v.paste_html(&html)
+                } else if !text.is_empty() {
+                    v.paste_text(&text)
+                } else {
+                    None
+                }
+            })
+            .flatten();
+            if let Some(t) = transform {
+                apply_transform(state, &t);
+            }
+        });
+        register("paste", cb);
+    }
 
     // `selectionchange` only fires on `document`; mirror the browser
     // selection back into state so toolbar/keymap commands see the right

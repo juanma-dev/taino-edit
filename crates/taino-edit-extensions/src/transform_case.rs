@@ -59,7 +59,11 @@ fn map_slice(slice: &Slice, schema: &Schema, f: &dyn Fn(&str) -> String) -> Slic
         .iter()
         .map(|c| map_text_nodes(c, schema, f))
         .collect();
-    Slice::new(Fragment::from_nodes(kids), slice.open_start(), slice.open_end())
+    Slice::new(
+        Fragment::from_nodes(kids),
+        slice.open_start(),
+        slice.open_end(),
+    )
 }
 
 fn case_command(f: fn(&str) -> String) -> Command {

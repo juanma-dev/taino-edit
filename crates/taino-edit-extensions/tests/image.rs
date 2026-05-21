@@ -75,7 +75,10 @@ fn insert_image_replaces_selection_with_an_image_node() {
     let kids = j["content"][0]["content"].as_array().unwrap();
     assert_eq!(kids.len(), 3, "split text + image + tail");
     assert_eq!(kids[1]["type"], json!("image"));
-    assert_eq!(kids[1]["attrs"]["src"], json!("https://example.com/cat.png"));
+    assert_eq!(
+        kids[1]["attrs"]["src"],
+        json!("https://example.com/cat.png")
+    );
 }
 
 #[test]

@@ -20,7 +20,7 @@ in Phase 7 (polish + publish). Tests pass workspace-wide:
 
 | | |
 |---|---|
-| Host tests | **128** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, and **12 extensions**: bold, italic, heading, paragraph, history, link, image, align, transform_case, blockquote, code_block, lists) |
+| Host tests | **110** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, and **12 extensions**: bold, italic, heading, paragraph, history, link, image, align, transform_case, blockquote, code_block, lists) |
 | Browser tests | **52** `wasm_bindgen_test` cases in headless Chromium 148 (mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos component + event wiring) |
 
 See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the

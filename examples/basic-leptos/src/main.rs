@@ -1,15 +1,19 @@
-//! End-to-end demo: a `<TainoEditor>` mounted alongside a toolbar, full
-//! `Mod-…` keymap wired on `keydown`, and a live JSON + HTML preview of
-//! the doc. Build with `trunk serve` in this directory.
+//! End-to-end demo: a `<TainoEditor>` mounted alongside a toolbar that
+//! exercises every v0.1 extension (marks, headings, alignment, lists,
+//! blockquote, code-block, link, image, case transforms, undo/redo), a
+//! full `Mod-…` keymap wired on `keydown`, and a live JSON + HTML preview
+//! of the doc. Build with `trunk serve` in this directory.
 
-use leptos::ev::KeyboardEvent;
+use leptos::ev::{KeyboardEvent, MouseEvent};
 use leptos::prelude::*;
 use taino_edit_extensions::{
-    build_keymap_with, build_schema_with, redo_command, undo_command, Bold, Heading, History,
-    Italic, Paragraph,
+    align_center, align_justify, align_left, align_right, build_keymap_with, build_schema_with,
+    insert_image, lift_list_item, redo_command, remove_link, set_link, to_lowercase, to_uppercase,
+    undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote, Bold, CodeBlock,
+    Heading, History, Image, Italic, Link, Lists, Paragraph,
 };
 use taino_edit_leptos::{
-    set_block_type, toggle_mark, Attrs, Command, EditorState, KeyPress, Keymap, NodeSpec,
+    set_block_type, toggle_mark, wrap_in, Attrs, Command, EditorState, KeyPress, Keymap, NodeSpec,
     SchemaBuilder, Selection, TainoEditor, Transaction,
 };
 
@@ -35,8 +39,19 @@ fn App() -> impl IntoView {
                 ..Default::default()
             },
         );
-    let exts: Vec<&dyn taino_edit_extensions::Extension> =
-        vec![&Paragraph, &Heading, &Bold, &Italic, &History];
+    let exts: Vec<&dyn taino_edit_extensions::Extension> = vec![
+        &Paragraph,
+        &Heading,
+        &Bold,
+        &Italic,
+        &Link,
+        &Image,
+        &Align,
+        &Blockquote,
+        &CodeBlock,
+        &Lists,
+        &History,
+    ];
     let schema = build_schema_with(base, &exts, "doc").expect("schema builds");
 
     let title = schema.text("Welcome to taino-edit", vec![]).unwrap();
@@ -88,12 +103,11 @@ fn App() -> impl IntoView {
         }
     };
 
-    // ------- toolbar -------------------------------------------------------
+    // ------- toolbar helpers ----------------------------------------------
     let strong = schema.mark_type("strong").unwrap().clone();
     let em = schema.mark_type("em").unwrap().clone();
-    let bold_cmd = toggle_mark(strong);
-    let italic_cmd = toggle_mark(em);
 
+    // Apply a command, fold the result back into the state signal.
     let run_command = move |cmd: &Command| {
         let mut next = None;
         let snapshot = state.get_untracked();
@@ -106,30 +120,51 @@ fn App() -> impl IntoView {
         }
     };
 
-    // We can't move `bold_cmd` directly into the closure (it's a Box<dyn Fn>
-    // and we want to use it more than once across button clicks). Stash each
-    // command in its own StoredValue and run on demand.
-    let bold_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(bold_cmd);
-    let italic_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(italic_cmd);
-    let undo_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(undo_command());
-    let redo_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(redo_command());
-    let para_slot: StoredValue<Command, LocalStorage> =
-        StoredValue::new_local(set_block_type("paragraph", Attrs::new()));
-    let h1_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(set_block_type(
+    // Static commands kept in their own StoredValue so each button-click
+    // closure can grab a Copy handle (Box<dyn Fn> is !Send and is consumed
+    // when called repeatedly without a slot).
+    let slot = |cmd: Command| -> StoredValue<Command, LocalStorage> { StoredValue::new_local(cmd) };
+
+    let bold_slot = slot(toggle_mark(strong));
+    let italic_slot = slot(toggle_mark(em));
+    let undo_slot = slot(undo_command());
+    let redo_slot = slot(redo_command());
+    let para_slot = slot(set_block_type("paragraph", Attrs::new()));
+    let h1_slot = slot(set_block_type(
         "heading",
         Attrs::from_iter([("level".into(), serde_json::json!(1u64))]),
     ));
-    let h2_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(set_block_type(
+    let h2_slot = slot(set_block_type(
         "heading",
         Attrs::from_iter([("level".into(), serde_json::json!(2u64))]),
     ));
-    let h3_slot: StoredValue<Command, LocalStorage> = StoredValue::new_local(set_block_type(
+    let h3_slot = slot(set_block_type(
         "heading",
         Attrs::from_iter([("level".into(), serde_json::json!(3u64))]),
     ));
+    let align_l_slot = slot(align_left());
+    let align_c_slot = slot(align_center());
+    let align_r_slot = slot(align_right());
+    let align_j_slot = slot(align_justify());
+    let upper_slot = slot(to_uppercase());
+    let lower_slot = slot(to_lowercase());
+    let bq_slot = slot(wrap_in("blockquote", Attrs::new()));
+    let code_slot = slot(set_block_type("code_block", Attrs::new()));
+    let ul_slot = slot(wrap_in_bullet_list());
+    let ol_slot = slot(wrap_in_ordered_list());
+    let lift_slot = slot(lift_list_item());
+    let unlink_slot = slot(remove_link());
 
-    let run_slot = move |slot: StoredValue<Command, LocalStorage>| {
-        slot.with_value(|c| run_command(c));
+    let run_slot = move |s: StoredValue<Command, LocalStorage>| {
+        s.with_value(|c| run_command(c));
+    };
+
+    // Toolbar buttons must not steal focus from the editor (the contenteditable
+    // selection collapses on focus loss, and `state.selection` would then
+    // mirror an empty selection via `selectionchange`). `mousedown` runs
+    // before focus moves, so preventDefault keeps the editor focused.
+    let keep_focus = move |ev: MouseEvent| {
+        ev.prevent_default();
     };
 
     let select_all = move |_| {
@@ -137,6 +172,30 @@ fn App() -> impl IntoView {
         let mut tx = snapshot.tr();
         tx.set_selection(Selection::All);
         state.set(snapshot.apply(tx));
+    };
+
+    // Link command: ask the user for a URL, then dispatch set_link.
+    let on_link = move |_| {
+        let url = web_sys::window().and_then(|w| w.prompt_with_message("URL:").ok().flatten());
+        if let Some(href) = url.filter(|s| !s.is_empty()) {
+            let cmd = set_link(href, None);
+            run_command(&cmd);
+        }
+    };
+
+    // Image command: ask for a URL + alt text, then dispatch insert_image.
+    let on_image = move |_| {
+        let win = web_sys::window();
+        let src = win
+            .as_ref()
+            .and_then(|w| w.prompt_with_message("Image URL:").ok().flatten())
+            .filter(|s| !s.is_empty());
+        let Some(src) = src else { return };
+        let alt = win
+            .as_ref()
+            .and_then(|w| w.prompt_with_message("Alt text:").ok().flatten());
+        let cmd = insert_image(src, alt.filter(|s| !s.is_empty()));
+        run_command(&cmd);
     };
 
     // ------- live previews -------------------------------------------------
@@ -157,22 +216,39 @@ fn App() -> impl IntoView {
                 </p>
             </header>
 
-            <div role="toolbar" style="display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem;">
-                <button on:click=move |_| run_slot(bold_slot)>"Bold (Mod-b)"</button>
-                <button on:click=move |_| run_slot(italic_slot)>"Italic (Mod-i)"</button>
+            <div role="toolbar" style="display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; align-items:center;">
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(bold_slot)>"Bold"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(italic_slot)>"Italic"</button>
+                <button on:mousedown=keep_focus on:click=on_link>"Link…"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(unlink_slot)>"Unlink"</button>
+                <button on:mousedown=keep_focus on:click=on_image>"Image…"</button>
                 <span style="width:.5rem"></span>
-                <button on:click=move |_| run_slot(para_slot)>"Paragraph (Mod-Alt-0)"</button>
-                <button on:click=move |_| run_slot(h1_slot)>"H1 (Mod-Alt-1)"</button>
-                <button on:click=move |_| run_slot(h2_slot)>"H2 (Mod-Alt-2)"</button>
-                <button on:click=move |_| run_slot(h3_slot)>"H3 (Mod-Alt-3)"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(para_slot)>"P"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(h1_slot)>"H1"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(h2_slot)>"H2"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(h3_slot)>"H3"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(bq_slot)>"❝ Quote"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(code_slot)>"<> Code"</button>
                 <span style="width:.5rem"></span>
-                <button on:click=move |_| run_slot(undo_slot)>
-                    {move || format!("Undo (Mod-z) [{}]", undo_depth.get())}
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(align_l_slot)>"⇤"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(align_c_slot)>"≡"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(align_r_slot)>"⇥"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(align_j_slot)>"☰"</button>
+                <span style="width:.5rem"></span>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(ul_slot)>"• List"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(ol_slot)>"1. List"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(lift_slot)>"⇤ Lift"</button>
+                <span style="width:.5rem"></span>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(upper_slot)>"AA"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(lower_slot)>"aa"</button>
+                <span style="width:.5rem"></span>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(undo_slot)>
+                    {move || format!("Undo [{}]", undo_depth.get())}
                 </button>
-                <button on:click=move |_| run_slot(redo_slot)>
-                    {move || format!("Redo (Mod-Shift-z) [{}]", redo_depth.get())}
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(redo_slot)>
+                    {move || format!("Redo [{}]", redo_depth.get())}
                 </button>
-                <button on:click=select_all>"Select all (Mod-a)"</button>
+                <button on:mousedown=keep_focus on:click=select_all>"Select all"</button>
             </div>
 
             <div on:keydown=on_keydown>
@@ -201,15 +277,19 @@ fn App() -> impl IntoView {
             <details style="margin-top:1.5rem;">
                 <summary>"Try this checklist"</summary>
                 <ol>
-                    <li>"Click in a word and press " <code>"Mod-b"</code> ". The strong mark should NOT apply (caret only)."</li>
-                    <li>"Select a word, then " <code>"Mod-b"</code> ". Strong appears in both panels."</li>
+                    <li>"Select a word, press " <code>"Mod-b"</code> ". Strong appears in both panels."</li>
                     <li>"Same with " <code>"Mod-i"</code> "."</li>
-                    <li>"Place the caret in a paragraph and press " <code>"Mod-Alt-2"</code> ". It becomes an h2."</li>
-                    <li><code>"Mod-Alt-0"</code> " turns it back into a paragraph."</li>
-                    <li>"Type some text. Press " <code>"Mod-z"</code> ". The undo depth shrinks; the doc rolls back."</li>
-                    <li>"Press " <code>"Mod-Shift-z"</code> " to redo."</li>
-                    <li>"Paste some text from another tab — it lands as plain text, no markup leaks."</li>
-                    <li>"Paste HTML (e.g. copy from a news article). Only known tags survive (<p>, <strong>, <em>, h1/h2/h3)."</li>
+                    <li>"Place the caret in a paragraph, click " <strong>"H2"</strong> ". It becomes an h2."</li>
+                    <li>"Click " <strong>"P"</strong> " (or press " <code>"Mod-Alt-0"</code> ") to turn it back."</li>
+                    <li>"Click " <strong>"≡"</strong> " on a paragraph — its style emits " <code>"text-align: center"</code> "."</li>
+                    <li>"Click " <strong>"• List"</strong> " to wrap the block in a bullet list. " <code>"Shift-Tab"</code> " lifts it back out (single-item case)."</li>
+                    <li>"Click " <strong>"❝ Quote"</strong> " (" <code>"Mod->"</code> ") to wrap a paragraph in a blockquote."</li>
+                    <li>"Click " <strong>"<> Code"</strong> " (" <code>"Mod-`"</code> ") to turn the block into a " <code>"<pre>"</code> "."</li>
+                    <li>"Select a word, click " <strong>"AA"</strong> " — only the selection uppercases, marks preserved."</li>
+                    <li>"Select a word, click " <strong>"Link…"</strong> ", paste a URL — " <code>"<a href>"</code> " wraps the text."</li>
+                    <li>"Place the caret, click " <strong>"Image…"</strong> ", paste an image URL + alt text."</li>
+                    <li>"Type some text. Press " <code>"Mod-z"</code> ". The undo depth shrinks; the doc rolls back. " <code>"Mod-Shift-z"</code> " redoes."</li>
+                    <li>"Paste some text from another tab — only known tags survive (" <code>"<p>"</code> ", " <code>"<strong>"</code> ", " <code>"<em>"</code> ", " <code>"h1/h2/h3"</code> ", " <code>"<a>"</code> ", " <code>"<img>"</code> ", " <code>"<ul>/<ol>/<li>"</code> ", " <code>"<blockquote>"</code> ", " <code>"<pre>"</code> ")."</li>
                     <li>"Watch the live JSON / HTML panels stay in lockstep with the editor."</li>
                 </ol>
             </details>
