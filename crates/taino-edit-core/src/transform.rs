@@ -124,15 +124,39 @@ impl Transform {
     /// Split the textblock at `pos` into two blocks of the same type
     /// (depth-1 split — the common Enter behaviour).
     pub fn split(&mut self, pos: usize, schema: &Schema) -> Result<&mut Self, StepError> {
-        let rp = ResolvedPos::resolve(self.doc(), pos).map_err(|e| StepError(e.to_string()))?;
-        let depth = rp.depth();
-        if depth == 0 {
-            return Err(StepError("cannot split at the top level".into()));
+        self.split_at_depth(pos, 1, schema)
+    }
+
+    /// Split at `pos` all the way up to `levels` ancestors (so `levels = 1`
+    /// is the regular textblock split, `levels = 2` splits a list_item +
+    /// its paragraph, etc.). The split inserts `levels` pairs of (close,
+    /// open) at `pos`; everything before stays in the first copy of each
+    /// wrapper, everything after moves into the second.
+    pub fn split_at_depth(
+        &mut self,
+        pos: usize,
+        levels: usize,
+        schema: &Schema,
+    ) -> Result<&mut Self, StepError> {
+        if levels == 0 {
+            return Err(StepError("split_at_depth requires levels >= 1".into()));
         }
-        let block = rp.node(depth).clone();
-        let empty = block.copy_content(Fragment::empty());
-        let content = Fragment::from_node(empty.clone()).append(&Fragment::from_node(empty));
-        self.replace(pos, pos, Slice::new(content, 1, 1), schema)
+        let rp = ResolvedPos::resolve(self.doc(), pos).map_err(|e| StepError(e.to_string()))?;
+        if rp.depth() < levels {
+            return Err(StepError(format!(
+                "split_at_depth({levels}) needs at least {levels} ancestors at pos {pos}, found {}",
+                rp.depth()
+            )));
+        }
+        // Build the empty wrapper from the deepest level upward.
+        let deepest = rp.parent().clone();
+        let mut inner = deepest.copy_content(Fragment::empty());
+        for d in (rp.depth() - levels + 1..rp.depth()).rev() {
+            let outer = rp.node(d).clone();
+            inner = outer.copy_content(Fragment::from_node(inner));
+        }
+        let content = Fragment::from_node(inner.clone()).append(&Fragment::from_node(inner));
+        self.replace(pos, pos, Slice::new(content, levels, levels), schema)
     }
 
     /// Set attribute `attr` to `value` on the node at `pos`.
