@@ -20,10 +20,14 @@ use taino_edit_core::{
 };
 
 pub mod bold;
+pub mod heading;
 pub mod italic;
+pub mod paragraph;
 
 pub use bold::Bold;
+pub use heading::Heading;
 pub use italic::Italic;
+pub use paragraph::Paragraph;
 
 /// Node and mark types an extension contributes to the schema.
 #[derive(Default)]
