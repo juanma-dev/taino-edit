@@ -11,9 +11,10 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current phase**            | 7 — Polish + release prep done; awaiting `cargo publish` |
+| **Current release**          | `v0.2.0` — list UX + Plugin trait + Markdown + Dioxus    |
 | **Last updated**             | 2026-05-21                                               |
-| **First milestone**          | `v0.1.0` — publishable MVP                               |
+| **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
+| **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~11–15k LOC, excluding tests) |
 | **First framework adapter**  | Leptos                                                   |
 | **License**                  | MIT OR Apache-2.0                                        |
@@ -211,39 +212,48 @@ gate and it is green.
 
 ---
 
-## v0.2 — In progress (started 2026-05-21)
+## v0.2 — Shipped 2026-05-21
 
 **Goal:** close the visible v0.1 gaps + broaden the platform so third parties can ship richer extensions without forking `core`.
 
-### Phase 1 — List UX completion
+### Phase 1 — List UX completion ✅
 
-- [ ] `split_list_item` command (multi-depth split: paragraph + list_item)
-- [ ] `sink_list_item` command (Tab to indent, nesting the current item into the previous sibling)
-- [ ] Multi-item `lift_list_item` via `ReplaceAroundStep`
-- [ ] Wire smart Enter (chain: split → lift-if-empty) and Tab in the `Lists` keymap
+- [x] `split_list_item` command (multi-depth split: paragraph + list_item)
+- [x] `sink_list_item` command (Tab to indent, nesting the current item into the previous sibling)
+- [x] Multi-item `lift_list_item` preserves surviving siblings (single-item case still works)
+- [x] Smart Enter (chain: split → lift-if-empty) and Tab wired in the `Lists` keymap
+- [x] New `Transform::split_at_depth(pos, levels, schema)` helper
 
-### Phase 2 — Plugin trait + PluginKey
+### Phase 2 — Plugin trait + PluginKey ✅
 
-- [ ] `Plugin` trait with associated `State` type, `apply(&Transaction)` hook
-- [ ] `PluginKey<T: Plugin>` for typed lookup of plugin state
-- [ ] `EditorState` holds a typed-erased map of plugin states
-- [ ] Migrate `History` onto the new trait (back-compat preserved through the existing `HistoryIntent` path)
+- [x] `Plugin` trait with associated `State` type, `init` + `apply(&Transaction)` hooks
+- [x] `PluginKey<P: Plugin>` zero-sized typed handle
+- [x] `EditorState` holds a typed-erased map of plugin states (`EditorState::with_plugins`, `state.plugin(key)`)
+- [~] `History` migration onto the trait — kept grandfathered for v0.2 via `HistoryIntent`; cosmetic migration tracked as v0.2.x
 
-### Phase 3 — Markdown serializer / parser
+### Phase 3 — Markdown serializer / parser ✅
 
-- [ ] `taino-edit-core::markdown::to_markdown(doc)` walks the tree to a CommonMark-subset string
-- [ ] `taino-edit-core::markdown::parse_markdown(schema, md)` returns a schema-valid `Node` (uses `pulldown-cmark` for tokenization)
-- [ ] DOM bridge: accept `text/markdown` on paste, fall back to current behaviour
+- [x] `taino_edit_core::markdown::to_markdown(doc)` (paragraphs, headings, blockquote, fenced code, bullet + ordered lists with start, strong/em/link marks, image)
+- [x] `taino_edit_core::markdown::parse_markdown(schema, md)` via `pulldown-cmark` 0.13, schema-validated
+- [x] DOM bridge: `EditorView::paste_markdown(md)`; Leptos adapter prefers `text/markdown` over `text/html` / `text/plain`
 
-### Phase 4 — Dioxus adapter
+### Phase 4 — Dioxus adapter ✅ (minimum-viable)
 
-- [ ] `taino-edit-dioxus::TainoEditor` component backed by Dioxus's reactive model
-- [ ] `examples/basic-dioxus` mirrors `examples/basic-leptos`
-- [ ] Headless-Chromium browser tests for the Dioxus mount + event wiring
+- [x] `taino_edit_dioxus::TainoEditor` mounts + DOM-patches on signal change
+- [x] `examples/basic-dioxus` (builds with `dx serve`)
+- [~] Full event-wiring parity (input → transform, IME, paste, selectionchange) — deferred to v0.2.x
 
-### Release
+### Release ✅
 
-- [ ] Bump workspace version to 0.2.0; refresh all docs; full gate sweep; `cargo publish` all 6 crates; tag `v0.2.0`; GitHub Release.
+- [x] Workspace version bumped to 0.2.0; docs refreshed; full gate sweep; `cargo publish` (6 crates); tag `v0.2.0`; GitHub Release.
+
+---
+
+## v0.2.x patch backlog
+
+- Migrate `History` onto the `Plugin` trait (the current `HistoryIntent` path works; the migration is cosmetic)
+- Full Dioxus event-wiring parity (input → transform round-trip, IME, paste, selectionchange)
+- Headless-Chromium browser tests for the Dioxus adapter
 
 ---
 

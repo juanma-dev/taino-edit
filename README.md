@@ -13,19 +13,36 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: feature-complete for v0.1, polishing for release
+## Status: v0.2.0 released
 
-All six implementation phases of v0.1 are done; the workspace is currently
-in Phase 7 (polish + publish). Tests pass workspace-wide:
+Six crates on crates.io. v0.2 closes the v0.1 list UX gaps and broadens
+the platform (Plugin trait, Markdown round-trip, Dioxus adapter ships
+real functionality). Tests pass workspace-wide:
 
 | | |
 |---|---|
-| Host tests | **110** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, and **12 extensions**: bold, italic, heading, paragraph, history, link, image, align, transform_case, blockquote, code_block, lists) |
+| Host tests | **145** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, plugin registry, Markdown serializer + parser, and **12 extensions** including the full list UX) |
 | Browser tests | **52** `wasm_bindgen_test` cases in headless Chromium 148 (mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos component + event wiring) |
 
 See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the
 scope budget, and the resolved design decisions; **[ROADMAP.md](ROADMAP.md)**
 tracks phase progress and what's deferred to v0.2.
+
+## What's new in v0.2 (2026-05-21)
+
+- **Complete list UX**: smart Enter inside a list item splits the
+  list_item (new bullet below), empty bullet + Enter exits the list,
+  `Tab` nests under the previous sibling, `Shift-Tab` lifts out, and
+  multi-item lift now preserves surviving siblings.
+- **`Plugin` trait + `PluginKey` + typed-state registry** in `core`:
+  third-party stateful components (word counters, autosave, future
+  CRDT bridges) plug into `EditorState` without forking core.
+- **Markdown round-trip**: `taino_edit_core::markdown::{to_markdown,
+  parse_markdown}` + `EditorView::paste_markdown`; the Leptos adapter
+  prefers `text/markdown` on paste when the clipboard advertises it.
+- **`taino-edit-dioxus`** ships as a real, minimum-viable adapter
+  (mount + DOM patch on signal change). [`examples/basic-dioxus`](examples/basic-dioxus/)
+  builds with `dx serve`.
 
 ## What ships in v0.1
 
@@ -91,14 +108,14 @@ Examples under [`examples/`](examples/):
 - [`headless-core`](examples/headless-core) — server-side / CLI demo
   proving `taino-edit-core` runs identically without a DOM.
 
-## Install (once published)
+## Install
 
 ```toml
 [dependencies]
-taino-edit = { version = "0.1", features = ["leptos"] }
+taino-edit = { version = "0.2", features = ["leptos"] }  # or "dioxus"
 ```
 
-No adapter is enabled by default — choose `leptos` (or, post-v0.1, `dioxus`).
+No adapter is enabled by default — pick `leptos` or `dioxus`.
 
 ## Use it (Leptos)
 

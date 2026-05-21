@@ -8,20 +8,71 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
-Target: **v0.2.0** — closing the v0.1 gaps and broadening the platform.
+## [0.2.0] - 2026-05-21
 
-Planned work:
+Closes the v0.1 list UX gaps and broadens the platform: a second
+framework adapter, a stateful-plugin trait, and Markdown round-trip.
 
-- List UX completion: smart Enter inside list items (`split_list_item`),
-  sink/dedent for nested lists (`sink_list_item`), multi-item
-  `lift_list_item`.
-- Generic `Plugin` trait + `PluginKey` typed-state registry in `core`;
-  `History` migrated onto it as the canonical example.
-- Markdown serializer + parser (`taino-edit-core::markdown`), with the
-  DOM bridge able to accept `text/markdown` on paste.
-- A real `taino-edit-dioxus` adapter on top of the shared `dom` layer.
+### Highlights
 
-See [`ROADMAP.md`](ROADMAP.md) for the phased plan.
+- **List UX completion.** Smart Enter inside a list item (splits both
+  the textblock and the enclosing list_item), sink/dedent (`Tab` →
+  nest under previous sibling), and multi-item `lift_list_item` that
+  preserves the surviving siblings. Empty-bullet + Enter exits the
+  list.
+- **`Plugin` trait + `PluginKey` + typed-state registry** in `core`.
+  Third-party stateful components (word counters, autosave, future
+  CRDT bridges) plug into `EditorState` without forking core. The
+  built-in `History` machinery stays grandfathered for back-compat.
+- **Markdown round-trip.** New `taino_edit_core::markdown` module:
+  `to_markdown(node)` serializes to a CommonMark subset; `parse_markdown`
+  tokenises via `pulldown-cmark` and validates the result against the
+  schema. `EditorView::paste_markdown` is wired; the Leptos adapter
+  now prefers `text/markdown` over `text/html` / `text/plain` when the
+  clipboard advertises it.
+- **`taino-edit-dioxus` adapter** ships as a real, minimum-viable
+  adapter (previously a name-reservation placeholder). Mount + DOM
+  patching prove the architecture is framework-agnostic in practice.
+  `examples/basic-dioxus` builds with `dx serve`.
+- `Transform::split_at_depth(pos, levels, schema)` — generalised the
+  single-depth `split` so callers can do multi-level structural splits
+  (smart Enter uses it for paragraph + list_item).
+
+### Added
+
+- **List commands**: `split_list_item` / `smart_enter_in_list` /
+  `sink_list_item`; `lift_list_item` generalised. `Lists` keymap now
+  binds `Tab` and `Enter` (chained with `split_block` so the binding
+  only fires inside a list).
+- **Plugin platform**: `Plugin` trait, `PluginKey<P>`, `PluginSet`,
+  `EditorState::with_plugins(...)`, `EditorState::plugin(key)`.
+- **Markdown**: `taino_edit_core::markdown::{to_markdown,
+  parse_markdown}`, `EditorView::paste_markdown(md)`, and adapter
+  paste-prefers-markdown wiring.
+- **Dioxus**: `taino_edit_dioxus::TainoEditor` component, full
+  curated re-exports of the core types. The umbrella `taino-edit`
+  crate's `dioxus` feature now wires through to functionality instead
+  of an empty crate.
+- **Transform helper**: `Transform::split_at_depth(pos, levels, schema)`.
+
+### Changed
+
+- `taino-edit-core` now depends on `pulldown-cmark` (default-features
+  off) for the Markdown parser.
+- `EditorState` carries a typed-erased plugin-state registry alongside
+  its existing `History`. `EditorState::new(doc, schema)` keeps
+  working with an empty plugin set, so v0.1 callers are unaffected.
+
+### Known limitations / deferred
+
+- Migrating `History` onto the `Plugin` trait (it works via a
+  dedicated `HistoryIntent` short-circuit; the migration is cosmetic
+  and tracked as a v0.2.x patch task).
+- Full event-wiring parity for the Dioxus adapter (input → transform
+  round-trip, IME, paste, selectionchange) — the dom-layer pieces are
+  shipped; wiring lands in v0.2.x.
+- Generic plugin lifecycle hooks beyond `init` + `apply` (e.g.
+  `view_props`, `destroy`) — out of v0.2 scope.
 
 ## [0.1.0] - 2026-05-21
 
@@ -208,5 +259,6 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     caret are reflected visually. Both directions guard against echo
     loops via an `applying_selection` flag.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.1.0

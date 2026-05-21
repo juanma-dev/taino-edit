@@ -9,8 +9,9 @@
 //!   appears below the caret.
 //! * [`sink_list_item`] — Tab to indent: the current list_item becomes a
 //!   nested list inside its previous sibling.
-//! * [`lift_list_item`] — generalised to handle multi-item lists via
-//!   [`ReplaceAroundStep`]; the single-item case still works the same.
+//! * [`lift_list_item`] — generalised to handle multi-item lists (it
+//!   splits the surviving items into before-list / after-list around
+//!   the lifted blocks); the single-item case still works the same.
 //! * [`smart_enter_in_list`] — convenience: lift if the caret sits in an
 //!   empty list_item, otherwise split. The `Lists` extension binds it
 //!   on `Enter` (after the base keymap's `split_block`).
