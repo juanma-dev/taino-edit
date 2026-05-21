@@ -27,6 +27,7 @@ pub mod image;
 pub mod italic;
 pub mod link;
 pub mod paragraph;
+pub mod transform_case;
 
 pub use align::{align_center, align_justify, align_left, align_right, Align};
 pub use bold::Bold;
@@ -36,6 +37,7 @@ pub use image::{insert_image, Image};
 pub use italic::Italic;
 pub use link::{remove_link, set_link, Link};
 pub use paragraph::Paragraph;
+pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 
 /// Node and mark types an extension contributes to the schema.
 #[derive(Default)]
