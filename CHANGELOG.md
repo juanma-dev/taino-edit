@@ -10,16 +10,35 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ### Added
 
-- **`Table` extension** (structural MVP): `table` / `table_row` /
-  `table_cell` nodes with a `<table><tr><td>` HTML round-trip, plus
-  commands `insert_table(rows, cols)`, `add_row_before` / `add_row_after`
-  / `delete_row`, `add_column_before` / `add_column_after` /
-  `delete_column`, and `delete_table`. Each operates on the cell
-  containing the caret and rebuilds the table wholesale (small tables;
-  obviously-correct position math). Deleting the last row or column
-  removes the whole table. No default keymap — commands are exported for
-  a host toolbar. Cell-range selection, merge/split, column resizing,
-  header toggling and Tab cell-navigation are deliberately deferred.
+- **`Table` extension** — a full table feature set:
+  - **Nodes**: `table` / `table_row` / `table_cell` with `<table><tr>
+    <td>`/`<th>` HTML round-trip. Cells carry `colspan` / `rowspan` /
+    `header` / `colwidth` attrs.
+  - **Structural commands**: `insert_table(rows, cols)`, `add_row_before`
+    / `add_row_after` / `delete_row`, `add_column_before` /
+    `add_column_after` / `delete_column`, `delete_table`. Deleting the
+    last row or column removes the whole table.
+  - **Header toggling**: `toggle_header_row` / `toggle_header_column` /
+    `toggle_header_cell` (flip cells between `<td>` and `<th>`).
+  - **Cell navigation**: `go_to_next_cell` (`Tab`) / `go_to_prev_cell`
+    (`Shift-Tab`); next-past-the-last-cell appends a row. Coexists with
+    the Lists `Tab` binding via the new chained-keymap composition.
+  - **Cell-range selection + merge/split**: `Selection::Cell` (new core
+    variant), a `TableMap` resolving the logical grid through
+    colspan/rowspan, `select_cell_range`, `merge_cells` (rectangle →
+    spanned cell with concatenated content) and `split_cell` (spanned
+    cell → 1×1 cells).
+  - **Column resize**: `colwidth` attr serialized as `style="width:
+    Npx"`, set via `set_column_width(col, width)`.
+  - The `basic-leptos` demo gains a table toolbar (insert / row / column
+    / header / merge / split / resize / delete).
+- **`Selection::Cell { anchor, head }`** in `taino-edit-core` — a
+  positional table cell-range selection (table-aware code interprets the
+  rectangle; `core` handles `from`/`to`/`map` generically).
+- **`Keymap::add_chained`** + chain-on-conflict in `build_keymap_with`:
+  when two extensions bind the same key, the bindings chain (later tried
+  first, earlier as fallback) instead of overriding — so `Tab` runs
+  cell-navigation in a table and list-indent in a list.
 
 ### Docs
 
