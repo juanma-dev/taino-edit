@@ -7,7 +7,7 @@
 
 use std::cell::Cell;
 
-use taino_edit_core::{DomSpec, Fragment, Node, Schema, Selection, Slice, Transform};
+use taino_edit_core::{Command, DomSpec, Fragment, Node, Schema, Selection, Slice, Transform};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Document, Element};
 
@@ -19,8 +19,9 @@ use crate::position_map::{doc_pos_to_dom, dom_to_doc_pos};
 pub enum ViewAction {
     /// Replace the selection (e.g. a cell drag selecting a range).
     Select(Selection),
-    /// Apply a document transform (e.g. a resize writing `colwidth`).
-    Apply(Transform),
+    /// Run an editing [`Command`] against the state (e.g. a column resize
+    /// reusing `set_column_width`). The adapter applies it to its state.
+    Command(Command),
 }
 
 /// A DOM-aware editor plugin: it reacts to raw browser events and
@@ -160,6 +161,13 @@ impl EditorView {
             }
             el = parent;
         }
+    }
+
+    /// The DOM element of the node that begins at document position `pos`
+    /// (any depth — block or nested cell). Used by pointer plugins to read
+    /// a cell's geometry (e.g. for column-resize hit-testing).
+    pub fn node_dom_at(&self, pos: usize) -> Option<Element> {
+        dom_element_at(&self.children, 0, pos).cloned()
     }
 
     /// Replace the set of decorations applied on top of the rendered DOM.

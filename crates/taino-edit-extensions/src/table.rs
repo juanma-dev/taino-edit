@@ -1018,6 +1018,95 @@ pub fn go_to_prev_cell() -> Command {
     go_to_cell(false)
 }
 
+// ---- pointer-plugin helpers ----------------------------------------------
+
+/// Where a document position sits within a table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CellAt {
+    /// Position directly before the enclosing `table` node.
+    pub table_pos: usize,
+    /// Position directly before the enclosing cell.
+    pub cell_pos: usize,
+    /// Logical row of the cell.
+    pub row: usize,
+    /// Logical column of the cell.
+    pub col: usize,
+}
+
+/// Resolve the table cell containing document position `pos`, if any. Used
+/// by pointer-driven UI (cell drag-select, column resize) to turn a mapped
+/// point into a cell.
+pub fn cell_at(doc: &Node, pos: usize) -> Option<CellAt> {
+    let rp = ResolvedPos::resolve(doc, pos).ok()?;
+    let (td, row_idx, cell_idx) = find_table(&rp)?;
+    let table = rp.node(td);
+    let table_pos = rp.before(td);
+    let map = TableMap::of(table);
+    let (row, col) = map.logical_of((row_idx, cell_idx))?;
+    Some(CellAt {
+        table_pos,
+        cell_pos: cell_before_abs(table, table_pos, row_idx, cell_idx),
+        row,
+        col,
+    })
+}
+
+/// The cell-before positions covered by a [`Selection::Cell`] rectangle
+/// (expanded to whole spans, as a merge would). Empty for any other
+/// selection or a non-table position. Used to highlight selected cells.
+pub fn cells_in_selection(doc: &Node, sel: Selection) -> Vec<usize> {
+    let Selection::Cell { anchor, head } = sel else {
+        return Vec::new();
+    };
+    let Ok(rp) = ResolvedPos::resolve(doc, anchor.min(head) + 1) else {
+        return Vec::new();
+    };
+    let Some((td, _, _)) = find_table(&rp) else {
+        return Vec::new();
+    };
+    let table = rp.node(td);
+    let tstart = rp.before(td);
+    let map = TableMap::of(table);
+    let (Some((ar, ac)), Some((hr, hc))) = (
+        logical_at_pos(table, tstart, &map, anchor),
+        logical_at_pos(table, tstart, &map, head),
+    ) else {
+        return Vec::new();
+    };
+    let (mut r0, mut r1) = (ar.min(hr), ar.max(hr));
+    let (mut c0, mut c1) = (ac.min(hc), ac.max(hc));
+    // Expand to whole spans so the highlight matches the eventual merge.
+    let placements = placements_of(table);
+    loop {
+        let before = (r0, r1, c0, c1);
+        for p in &placements {
+            let pr1 = p.row + p.rowspan - 1;
+            let pc1 = p.col + p.colspan - 1;
+            if p.row <= r1 && pr1 >= r0 && p.col <= c1 && pc1 >= c0 {
+                r0 = r0.min(p.row);
+                r1 = r1.max(pr1);
+                c0 = c0.min(p.col);
+                c1 = c1.max(pc1);
+            }
+        }
+        if (r0, r1, c0, c1) == before {
+            break;
+        }
+    }
+    let mut out: Vec<usize> = Vec::new();
+    for r in r0..=r1 {
+        for c in c0..=c1 {
+            if let Some((ri, ci)) = map.at(r, c) {
+                let pos = cell_before_abs(table, tstart, ri, ci);
+                if !out.contains(&pos) {
+                    out.push(pos);
+                }
+            }
+        }
+    }
+    out
+}
+
 // ---- cell-range selection, merge & split ---------------------------------
 
 /// Set a [`Selection::Cell`] covering the rectangle between logical cells

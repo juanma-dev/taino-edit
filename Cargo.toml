@@ -24,6 +24,7 @@ taino-edit-dom = { version = "0.2.0", path = "crates/taino-edit-dom" }
 taino-edit-extensions = { version = "0.2.0", path = "crates/taino-edit-extensions" }
 taino-edit-leptos = { version = "0.2.0", path = "crates/taino-edit-leptos" }
 taino-edit-dioxus = { version = "0.2.0", path = "crates/taino-edit-dioxus" }
+taino-edit-table-view = { version = "0.2.0", path = "crates/taino-edit-table-view" }
 
 [profile.release]
 opt-level = "s"

@@ -1,0 +1,35 @@
+[package]
+name = "taino-edit-table-view"
+description = "Pointer interaction for taino-edit tables: cell drag-select, selection highlight and column-resize grips, as a ViewPlugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+taino-edit-core = { workspace = true }
+taino-edit-dom = { workspace = true }
+taino-edit-extensions = { workspace = true }
+wasm-bindgen = "0.2.121"
+
+[dependencies.web-sys]
+version = "0.3.98"
+features = [
+    "Window",
+    "Document",
+    "Element",
+    "Node",
+    "Event",
+    "MouseEvent",
+    "MouseEventInit",
+    "DomRect",
+    "HtmlHeadElement",
+]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.71"

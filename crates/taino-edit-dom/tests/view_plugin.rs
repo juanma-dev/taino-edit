@@ -125,7 +125,7 @@ fn view_plugin_event_dispatch_returns_action() {
     let ev = web_sys::Event::new("mousedown").unwrap();
     match view.handle_view_event(&ev) {
         Some(ViewAction::Select(sel)) => assert_eq!(sel, Selection::caret(7)),
-        Some(ViewAction::Apply(_)) => panic!("expected a Select action, got Apply"),
+        Some(ViewAction::Command(_)) => panic!("expected a Select action, got Command"),
         None => panic!("expected the plugin to produce an action"),
     }
 }
