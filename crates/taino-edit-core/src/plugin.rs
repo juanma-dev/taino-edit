@@ -8,10 +8,23 @@
 //! spell-check state, autosave queues, future CRDT bridges.
 //!
 //! v0.2 ships the trait, the typed-erased registry baked into
-//! [`EditorState`], and the [`PluginKey`] lookup. The built-in
-//! `History` machinery stays grandfathered for back-compat — it predates
-//! the trait and uses a dedicated `HistoryIntent` short-circuit — but
-//! new stateful components should plug in via this trait.
+//! [`EditorState`], and the [`PluginKey`] lookup.
+//!
+//! ## Observers, not drivers
+//!
+//! This trait is for **observer** plugins: [`Plugin::apply`] folds the
+//! plugin's own state forward from each transaction
+//! (`apply(tx, prev, state) -> state`) and deliberately *cannot* change
+//! the document. That keeps the abstraction small and predictable.
+//!
+//! Components that need to *drive* the document — replace it wholesale,
+//! like undo/redo — are a different category and intentionally do **not**
+//! use this trait. The built-in `History` is the canonical example: it
+//! rewrites the doc through a dedicated `HistoryIntent` short-circuit in
+//! [`EditorState::apply`] and stays a first-class `EditorState` field. A
+//! "HistoryPlugin" was evaluated and rejected (see `ROADMAP.md`,
+//! v0.2.x backlog) — it would have bloated this trait with history-only
+//! hooks for no gain.
 //!
 //! ```
 //! use std::sync::Arc;

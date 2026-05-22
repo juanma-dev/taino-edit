@@ -8,6 +8,14 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Docs
+
+- Recorded the decision to keep `History` as a first-class `EditorState`
+  field rather than migrating it onto the `Plugin` trait: the trait is
+  for *observer* plugins (fold state forward from transactions, can't
+  touch the doc), while `History` is a *driver* (undo/redo rewrite the
+  doc). See the `plugin` module docs and `ROADMAP.md`.
+
 ### Changed
 
 - **Dioxus adapter — full event-wiring parity.** `taino-edit-dioxus`
