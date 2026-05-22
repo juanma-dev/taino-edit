@@ -47,6 +47,12 @@ fn cell_attr_specs() -> HashMap<String, AttrSpec> {
             default: Some(AttrValue::from(false)),
         },
     );
+    a.insert(
+        "colwidth".to_string(),
+        AttrSpec {
+            default: Some(AttrValue::Null),
+        },
+    );
     a
 }
 
@@ -73,7 +79,20 @@ fn cell_to_dom(n: &Node) -> DomSpec {
     if rowspan != 1 {
         spec = spec.attr("rowspan", rowspan.to_string());
     }
+    if let Some(w) = n.attrs().get("colwidth").and_then(|v| v.as_u64()) {
+        spec = spec.attr("style", format!("width: {w}px"));
+    }
     spec
+}
+
+/// Extract a `width: Npx` declaration from a `style` attribute value.
+fn parse_style_width(style: &str) -> Option<u64> {
+    let lower = style.to_ascii_lowercase();
+    let idx = lower.find("width")?;
+    let after = lower[idx + "width".len()..].trim_start();
+    let after = after.strip_prefix(':')?.trim_start();
+    let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse::<u64>().ok()
 }
 
 fn cell_attrs_from(el: &HtmlElement, header: bool) -> Option<Attrs> {
@@ -89,6 +108,10 @@ fn cell_attrs_from(el: &HtmlElement, header: bool) -> Option<Attrs> {
         .unwrap_or(1);
     a.insert("colspan".into(), AttrValue::from(colspan));
     a.insert("rowspan".into(), AttrValue::from(rowspan));
+    match el.attr("style").and_then(parse_style_width) {
+        Some(w) => a.insert("colwidth".into(), AttrValue::from(w)),
+        None => a.insert("colwidth".into(), AttrValue::Null),
+    };
     Some(a)
 }
 
@@ -1053,6 +1076,76 @@ pub fn split_cell() -> Command {
                 d(tx);
             }
         }
+        true
+    })
+}
+
+// ---- column resizing -----------------------------------------------------
+
+/// Set the pixel width of logical column `col` of the table at the caret —
+/// the value behind a drag-to-resize grip. `width` is clamped to a small
+/// minimum. The width is stored as a `colwidth` attr on every cell covering
+/// that column and rendered as `style="width: …px"`.
+pub fn set_column_width(col: usize, width: u64) -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, caret_row, caret_col)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let map = TableMap::of(table);
+        if col >= map.width {
+            return false;
+        }
+        let w = width.max(24); // sane minimum column width
+                               // Document cells covering logical column `col` (one per logical row).
+        let mut targets: Vec<(usize, usize)> = Vec::new();
+        for r in 0..map.height {
+            if let Some(dc) = map.at(r, col) {
+                if !targets.contains(&dc) {
+                    targets.push(dc);
+                }
+            }
+        }
+        let schema = state.schema();
+        let mut new_rows = Vec::with_capacity(table.child_count());
+        for (ri, row) in table.content().iter().enumerate() {
+            let mut cells = row.content().children().to_vec();
+            for (ci, cell) in cells.iter_mut().enumerate() {
+                if targets.contains(&(ri, ci)) {
+                    let mut attrs = cell.attrs().clone();
+                    attrs.insert("colwidth".into(), AttrValue::from(w));
+                    let Ok(updated) = schema.node(
+                        "table_cell",
+                        attrs,
+                        cell.content().children().to_vec(),
+                        cell.marks().to_vec(),
+                    ) else {
+                        return false;
+                    };
+                    *cell = updated;
+                }
+            }
+            let Ok(new_row) = schema.node("table_row", row.attrs().clone(), cells, vec![]) else {
+                return false;
+            };
+            new_rows.push(new_row);
+        }
+        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+            return false;
+        };
+        // Attr-only change, but it's a full-table replace, so keep the caret
+        // in its cell explicitly.
+        replace_table(
+            state,
+            &rp,
+            td,
+            Some(new_table),
+            Some((caret_row, caret_col)),
+            dispatch,
+        );
         true
     })
 }

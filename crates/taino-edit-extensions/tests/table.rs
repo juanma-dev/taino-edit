@@ -7,8 +7,8 @@ use taino_edit_core::{
 use taino_edit_extensions::{
     add_column_after, add_column_before, add_row_after, build_keymap_with, build_schema_with,
     delete_column, delete_row, delete_table, go_to_next_cell, go_to_prev_cell, insert_table,
-    merge_cells, select_cell_range, split_cell, toggle_header_cell, toggle_header_column,
-    toggle_header_row, Extension, Lists, Paragraph, Table,
+    merge_cells, select_cell_range, set_column_width, split_cell, toggle_header_cell,
+    toggle_header_column, toggle_header_row, Extension, Lists, Paragraph, Table,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -368,6 +368,45 @@ fn split_is_noop_on_unspanned_cell() {
         !split_cell()(&s, None),
         "splitting a 1x1 cell must not apply"
     );
+}
+
+#[test]
+fn set_column_width_emits_style_on_that_column() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &set_column_width(0, 120));
+    let html = s.doc().to_html();
+    // Both rows' column-0 cells get the width; column-1 cells don't.
+    assert_eq!(
+        html.matches("width: 120px").count(),
+        2,
+        "column 0 of both rows should carry the width: {html}"
+    );
+}
+
+#[test]
+fn set_column_width_clamps_to_minimum() {
+    let s = run(doc_with_paragraph(), &insert_table(1, 1));
+    let s = run(s, &set_column_width(0, 5)); // below the 24px floor
+    assert!(s.doc().to_html().contains("width: 24px"));
+}
+
+#[test]
+fn column_width_round_trips_through_html() {
+    let s = run(doc_with_paragraph(), &insert_table(1, 2));
+    let s = run(s, &set_column_width(1, 200));
+    let html = s.doc().to_html();
+    let parsed = s.schema().parse_html(&html).expect("parse");
+    let reparsed = parsed.to_html();
+    assert!(
+        reparsed.contains("width: 200px"),
+        "colwidth lost on round-trip: {reparsed}"
+    );
+}
+
+#[test]
+fn set_column_width_is_noop_outside_a_table() {
+    let s = doc_with_paragraph();
+    assert!(!set_column_width(0, 100)(&s, None));
 }
 
 #[test]
