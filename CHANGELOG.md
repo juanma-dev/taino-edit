@@ -18,9 +18,11 @@ Pre-1.0, minor version bumps may include breaking API changes.
   runtime slot. Typing in a Dioxus-hosted editor now commits to the
   state signal (verified end-to-end in headless Chromium). This closes
   the v0.2.0 "minimum-viable adapter" gap.
-- `examples/basic-dioxus` gains live HTML + JSON panels (mirrors the
-  Leptos demo) and a `<div id="main">` mount target + trunk `index.html`
-  so it serves under both `dx serve` and `trunk serve`.
+- `examples/basic-dioxus` gains a full toolbar (Bold / Italic /
+  Paragraph / H1–H3 / Undo / Redo), the `Mod-…` keymap wired on
+  keydown, and live HTML + JSON panels — matching the Leptos demo. Also
+  a `<div id="main">` mount target + trunk `index.html` so it serves
+  under both `dx serve` and `trunk serve`.
 
 ## [0.2.0] - 2026-05-21
 
