@@ -201,6 +201,115 @@ fn find_table(rp: &ResolvedPos) -> Option<(usize, usize, usize)> {
     None
 }
 
+fn colspan_of(cell: &Node) -> usize {
+    cell.attrs()
+        .get("colspan")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as usize
+}
+fn rowspan_of(cell: &Node) -> usize {
+    cell.attrs()
+        .get("rowspan")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as usize
+}
+
+/// A resolved logical grid for a table, accounting for colspan/rowspan.
+/// `cells[r * width + c]` is the *document index* `(row_index, cell_index)`
+/// of the cell that covers logical position `(r, c)`.
+struct TableMap {
+    width: usize,
+    height: usize,
+    cells: Vec<(usize, usize)>,
+}
+
+impl TableMap {
+    fn of(table: &Node) -> TableMap {
+        let height = table.child_count();
+        // Logical width = sum of colspans across row 0 (row 0 has no
+        // incoming rowspans in a well-formed table).
+        let width = if height == 0 {
+            0
+        } else {
+            table
+                .child(0)
+                .content()
+                .iter()
+                .map(colspan_of)
+                .sum::<usize>()
+        };
+        let mut cells = vec![(usize::MAX, usize::MAX); width * height];
+        for (r, row) in table.content().iter().enumerate() {
+            let mut col = 0;
+            for (ci, cell) in row.content().iter().enumerate() {
+                // Skip logical columns already filled by a rowspan above.
+                while col < width && cells[r * width + col] != (usize::MAX, usize::MAX) {
+                    col += 1;
+                }
+                let cs = colspan_of(cell);
+                let rs = rowspan_of(cell);
+                for dr in 0..rs {
+                    for dc in 0..cs {
+                        let (rr, cc) = (r + dr, col + dc);
+                        if rr < height && cc < width {
+                            cells[rr * width + cc] = (r, ci);
+                        }
+                    }
+                }
+                col += cs;
+            }
+        }
+        TableMap {
+            width,
+            height,
+            cells,
+        }
+    }
+
+    /// The `(row_index, cell_index)` covering logical `(r, c)`.
+    fn at(&self, r: usize, c: usize) -> Option<(usize, usize)> {
+        if r < self.height && c < self.width {
+            let v = self.cells[r * self.width + c];
+            (v != (usize::MAX, usize::MAX)).then_some(v)
+        } else {
+            None
+        }
+    }
+
+    /// The top-left logical coordinate of the cell at document index
+    /// `(row_index, cell_index)`.
+    fn logical_of(&self, doc_cell: (usize, usize)) -> Option<(usize, usize)> {
+        for r in 0..self.height {
+            for c in 0..self.width {
+                if self.cells[r * self.width + c] == doc_cell {
+                    return Some((r, c));
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Absolute position directly before cell at document index
+/// `(row_index, cell_index)` of `table` starting at `tstart`.
+fn cell_before_abs(table: &Node, tstart: usize, row: usize, cell_idx: usize) -> usize {
+    let mut pos = tstart + 1; // before first row
+    for (ri, r) in table.content().iter().enumerate() {
+        if ri == row {
+            let mut cpos = pos + 1; // inside row, before first cell
+            for (ci, c) in r.content().iter().enumerate() {
+                if ci == cell_idx {
+                    return cpos;
+                }
+                cpos += c.node_size();
+            }
+            return cpos;
+        }
+        pos += r.node_size();
+    }
+    tstart + 1
+}
+
 /// Absolute caret position inside cell `(row, col)` of `table`, where the
 /// table node begins at `tstart`. Row/col are clamped to the grid, and the
 /// caret lands at the start of the cell's first block — so chained
@@ -684,4 +793,266 @@ pub fn go_to_next_cell() -> Command {
 /// `Shift-Tab`.
 pub fn go_to_prev_cell() -> Command {
     go_to_cell(false)
+}
+
+// ---- cell-range selection, merge & split ---------------------------------
+
+/// Set a [`Selection::Cell`] covering the rectangle between logical cells
+/// `anchor` and `head` (each `(row, col)`) of the table containing the
+/// caret. A host wires this to mouse drag-across-cells; tests use it to
+/// build a cell selection directly.
+pub fn select_cell_range(anchor: (usize, usize), head: (usize, usize)) -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, _, _)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let tstart = rp.before(td);
+        let map = TableMap::of(table);
+        let Some(a) = map.at(anchor.0, anchor.1) else {
+            return false;
+        };
+        let Some(h) = map.at(head.0, head.1) else {
+            return false;
+        };
+        let anchor_pos = cell_before_abs(table, tstart, a.0, a.1);
+        let head_pos = cell_before_abs(table, tstart, h.0, h.1);
+        if let Some(d) = dispatch {
+            let mut tx = state.tr();
+            tx.set_selection(Selection::Cell {
+                anchor: anchor_pos,
+                head: head_pos,
+            });
+            d(tx);
+        }
+        true
+    })
+}
+
+/// Merge the cells covered by the current [`Selection::Cell`] into one,
+/// with the matching colspan/rowspan and the concatenated content of all
+/// merged cells. A no-op unless a multi-cell range is selected.
+pub fn merge_cells() -> Command {
+    Box::new(move |state, dispatch| {
+        let Selection::Cell { anchor, head } = state.selection() else {
+            return false;
+        };
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), anchor.min(head) + 1) else {
+            return false;
+        };
+        let Some((td, _, _)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let tstart = rp.before(td);
+        let map = TableMap::of(table);
+
+        // Logical coordinates of the anchor & head cells.
+        let cell_at_pos = |p: usize| -> Option<(usize, usize)> {
+            // Resolve which document cell starts at abs position p, then map.
+            for (ri, row) in table.content().iter().enumerate() {
+                for (ci, _) in row.content().iter().enumerate() {
+                    if cell_before_abs(table, tstart, ri, ci) == p {
+                        return map.logical_of((ri, ci));
+                    }
+                }
+            }
+            None
+        };
+        let (Some((ar, ac)), Some((hr, hc))) = (cell_at_pos(anchor), cell_at_pos(head)) else {
+            return false;
+        };
+        let (r0, r1) = (ar.min(hr), ar.max(hr));
+        let (c0, c1) = (ac.min(hc), ac.max(hc));
+        if r0 == r1 && c0 == c1 {
+            return false; // single cell — nothing to merge
+        }
+
+        // Document cells inside the rectangle, in reading order.
+        let mut covered: Vec<(usize, usize)> = Vec::new();
+        for r in r0..=r1 {
+            for c in c0..=c1 {
+                if let Some(dc) = map.at(r, c) {
+                    if !covered.contains(&dc) {
+                        covered.push(dc);
+                    }
+                }
+            }
+        }
+        let top_left = match map.at(r0, c0) {
+            Some(tl) => tl,
+            None => return false,
+        };
+
+        // Merge all covered cells' block content into the top-left cell and
+        // give it the new spans.
+        let schema = state.schema();
+        let mut merged_blocks: Vec<Node> = Vec::new();
+        for (ri, ci) in &covered {
+            merged_blocks.extend(table.child(*ri).child(*ci).content().children().to_vec());
+        }
+        let mut attrs = table.child(top_left.0).child(top_left.1).attrs().clone();
+        attrs.insert("colspan".into(), AttrValue::from((c1 - c0 + 1) as u64));
+        attrs.insert("rowspan".into(), AttrValue::from((r1 - r0 + 1) as u64));
+        let Ok(merged_cell) = schema.node("table_cell", attrs, merged_blocks, vec![]) else {
+            return false;
+        };
+
+        // Rebuild rows, dropping covered cells except the top-left (replaced
+        // by the merged cell).
+        let mut new_rows = Vec::with_capacity(table.child_count());
+        for (ri, row) in table.content().iter().enumerate() {
+            let mut cells = Vec::new();
+            for (ci, cell) in row.content().iter().enumerate() {
+                if (ri, ci) == top_left {
+                    cells.push(merged_cell.clone());
+                } else if covered.contains(&(ri, ci)) {
+                    // dropped
+                } else {
+                    cells.push(cell.clone());
+                }
+            }
+            // A row may legitimately become empty only if the whole row was
+            // inside the rectangle and not the top-left row; skip such rows.
+            if cells.is_empty() {
+                continue;
+            }
+            let Ok(new_row) = schema.node("table_row", row.attrs().clone(), cells, vec![]) else {
+                return false;
+            };
+            new_rows.push(new_row);
+        }
+        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+            return false;
+        };
+        if let Some(d) = dispatch {
+            let mut tx = state.tr();
+            let start = rp.before(td);
+            let end = rp.after(td);
+            let slice = Slice::new(Fragment::from_node(new_table), 0, 0);
+            if tx
+                .transform()
+                .replace(start, end, slice, state.schema())
+                .is_ok()
+            {
+                // Caret into the merged (top-left) cell.
+                tx.set_selection(Selection::caret(start + 4));
+                d(tx);
+            }
+        }
+        true
+    })
+}
+
+/// Split the cell containing the caret (with colspan and/or rowspan > 1)
+/// back into 1×1 cells. The original content stays in the top-left; the
+/// new cells are empty. A no-op on an unspanned cell.
+pub fn split_cell() -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, row, col)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let cell = table.child(row).child(col);
+        let cs = colspan_of(cell);
+        let rs = rowspan_of(cell);
+        if cs == 1 && rs == 1 {
+            return false;
+        }
+        let schema = state.schema();
+        let map = TableMap::of(table);
+        let Some((lr, lc)) = map.logical_of((row, col)) else {
+            return false;
+        };
+
+        // The unspanned (1×1) version of the original cell, keeping content.
+        let mut base_attrs = cell.attrs().clone();
+        base_attrs.insert("colspan".into(), AttrValue::from(1u64));
+        base_attrs.insert("rowspan".into(), AttrValue::from(1u64));
+        let Ok(kept) = schema.node(
+            "table_cell",
+            base_attrs,
+            cell.content().children().to_vec(),
+            vec![],
+        ) else {
+            return false;
+        };
+
+        // Rebuild every row, inserting fresh cells for the freed logical
+        // columns. We work per logical row in the cell's vertical span.
+        let mut new_rows = Vec::with_capacity(table.child_count());
+        for (ri, r) in table.content().iter().enumerate() {
+            // Cells of this row that are NOT the spanned cell stay; we then
+            // splice the split cells into the right logical span.
+            if !(lr..lr + rs).contains(&ri) {
+                new_rows.push(r.clone());
+                continue;
+            }
+            // Rebuild this row: copy existing cells, replacing the spanned
+            // one (only present in its top row) and adding 1×1 cells across
+            // its logical columns.
+            let mut cells: Vec<Node> = Vec::new();
+            for (ci, c) in r.content().iter().enumerate() {
+                if ri == row && ci == col {
+                    // Top-left: emit the kept cell plus fillers for the rest
+                    // of this logical row's span.
+                    cells.push(kept.clone());
+                    for _ in 1..cs {
+                        let Some(e) = empty_cell(schema) else {
+                            return false;
+                        };
+                        cells.push(e);
+                    }
+                } else {
+                    cells.push(c.clone());
+                }
+            }
+            // For rows below the top (rowspan), the spanned cell wasn't a
+            // member, so add a full run of fillers at the freed columns.
+            if ri != row {
+                let mut fillers = Vec::new();
+                for _ in 0..cs {
+                    let Some(e) = empty_cell(schema) else {
+                        return false;
+                    };
+                    fillers.push(e);
+                }
+                // Insert fillers at logical column lc (best-effort: append at
+                // the position matching lc among existing cells).
+                let insert_at = lc.min(cells.len());
+                for (k, f) in fillers.into_iter().enumerate() {
+                    cells.insert(insert_at + k, f);
+                }
+            }
+            let Ok(new_row) = schema.node("table_row", r.attrs().clone(), cells, vec![]) else {
+                return false;
+            };
+            new_rows.push(new_row);
+        }
+        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+            return false;
+        };
+        if let Some(d) = dispatch {
+            let mut tx = state.tr();
+            let start = rp.before(td);
+            let end = rp.after(td);
+            let caret = cell_caret_pos(&new_table, start, lr, lc);
+            let slice = Slice::new(Fragment::from_node(new_table), 0, 0);
+            if tx
+                .transform()
+                .replace(start, end, slice, state.schema())
+                .is_ok()
+            {
+                tx.set_selection(Selection::caret(caret));
+                d(tx);
+            }
+        }
+        true
+    })
 }

@@ -7,8 +7,8 @@ use taino_edit_core::{
 use taino_edit_extensions::{
     add_column_after, add_column_before, add_row_after, build_keymap_with, build_schema_with,
     delete_column, delete_row, delete_table, go_to_next_cell, go_to_prev_cell, insert_table,
-    toggle_header_cell, toggle_header_column, toggle_header_row, Extension, Lists, Paragraph,
-    Table,
+    merge_cells, select_cell_range, split_cell, toggle_header_cell, toggle_header_column,
+    toggle_header_row, Extension, Lists, Paragraph, Table,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -297,6 +297,76 @@ fn tab_navigation_coexists_with_lists_via_chained_keymap() {
         st2.selection().from(),
         start + 4,
         "Tab should move to the next cell"
+    );
+}
+
+#[test]
+fn merge_cells_sets_colspan_and_drops_cells() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    // Select the two cells of row 0, then merge.
+    let s = run(s, &select_cell_range((0, 0), (0, 1)));
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    // Row 0 is now a single cell spanning 2 columns; row 1 keeps 2 cells.
+    assert!(
+        html.contains("<td colspan=\"2\">"),
+        "expected a colspan=2 cell: {html}"
+    );
+    let first_row = html.split("<tr>").nth(1).unwrap();
+    assert_eq!(
+        first_row
+            .split("</tr>")
+            .next()
+            .unwrap()
+            .matches("<td")
+            .count(),
+        1,
+        "row 0 should have one (merged) cell: {html}"
+    );
+}
+
+#[test]
+fn merge_then_split_restores_grid_width() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (0, 1)));
+    let s = run(s, &merge_cells());
+    assert!(s.doc().to_html().contains("colspan=\"2\""));
+    // Caret is in the merged cell; splitting restores two 1×1 cells.
+    let s = run(s, &split_cell());
+    let html = s.doc().to_html();
+    assert!(
+        !html.contains("colspan"),
+        "split should drop colspan: {html}"
+    );
+    assert_eq!(dims(&html), (2, 2), "grid should be 2x2 again: {html}");
+}
+
+#[test]
+fn merge_vertical_sets_rowspan() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    // Select column 0 across both rows.
+    let s = run(s, &select_cell_range((0, 0), (1, 0)));
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("rowspan=\"2\""),
+        "expected a rowspan=2 cell: {html}"
+    );
+}
+
+#[test]
+fn merge_is_noop_on_single_cell_selection() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (0, 0)));
+    assert!(!merge_cells()(&s, None), "merging one cell must not apply");
+}
+
+#[test]
+fn split_is_noop_on_unspanned_cell() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    assert!(
+        !split_cell()(&s, None),
+        "splitting a 1x1 cell must not apply"
     );
 }
 
