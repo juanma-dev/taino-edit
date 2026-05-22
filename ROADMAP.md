@@ -251,9 +251,9 @@ gate and it is green.
 
 ## v0.2.x patch backlog
 
-- Migrate `History` onto the `Plugin` trait (the current `HistoryIntent` path works; the migration is cosmetic)
-- Full Dioxus event-wiring parity (input → transform round-trip, IME, paste, selectionchange)
-- Headless-Chromium browser tests for the Dioxus adapter
+- [x] Full Dioxus event-wiring parity (input → transform round-trip, IME, paste, selectionchange) — done 2026-05-22; verified end-to-end in headless Chromium
+- [ ] Migrate `History` onto the `Plugin` trait (the current `HistoryIntent` path works; the migration is cosmetic)
+- [ ] Formal `wasm_bindgen_test` browser tests for the Dioxus adapter (currently verified via a headless-Chromium script, not CI-wired)
 
 ---
 
