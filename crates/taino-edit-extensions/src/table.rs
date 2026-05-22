@@ -104,6 +104,17 @@ impl Extension for Table {
         "table"
     }
 
+    fn keymap_entries(&self, _schema: &Schema) -> Vec<(String, Command)> {
+        // `Tab` / `Shift-Tab` move between cells. `build_keymap_with`
+        // chains these in front of any existing binding (e.g. the Lists
+        // sink/lift), and each command is a no-op outside a table, so the
+        // two cooperate.
+        vec![
+            ("Tab".to_string(), go_to_next_cell()),
+            ("Shift-Tab".to_string(), go_to_prev_cell()),
+        ]
+    }
+
     fn schema_additions(&self) -> SchemaAdditions {
         SchemaAdditions {
             nodes: vec![
@@ -577,4 +588,100 @@ pub fn toggle_header_column() -> Command {
 /// Toggle the `<th>`/`<td>` state of just the caret's cell.
 pub fn toggle_header_cell() -> Command {
     toggle_header(HeaderScope::Cell)
+}
+
+// ---- cell navigation -----------------------------------------------------
+
+/// Move the caret to the start of cell `(r, c)` of the table that begins
+/// at `tstart`.
+fn dispatch_caret_to(
+    state: &taino_edit_core::EditorState,
+    table: &Node,
+    tstart: usize,
+    r: usize,
+    c: usize,
+    dispatch: Option<&mut taino_edit_core::Dispatch<'_>>,
+) {
+    if let Some(d) = dispatch {
+        let pos = cell_caret_pos(table, tstart, r, c);
+        let mut tx = state.tr();
+        tx.set_selection(Selection::caret(pos));
+        d(tx);
+    }
+}
+
+fn go_to_cell(forward: bool) -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, row, col)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let n_rows = table.child_count();
+        let cur_cols = table.child(row).child_count();
+        let tstart = rp.before(td);
+
+        if forward {
+            if col + 1 < cur_cols {
+                dispatch_caret_to(state, table, tstart, row, col + 1, dispatch);
+                return true;
+            }
+            if row + 1 < n_rows {
+                dispatch_caret_to(state, table, tstart, row + 1, 0, dispatch);
+                return true;
+            }
+            // Past the last cell: append a fresh row and land in it.
+            let n_cols = cur_cols;
+            let mut cells = Vec::with_capacity(n_cols);
+            for _ in 0..n_cols {
+                let Some(c) = empty_cell(state.schema()) else {
+                    return false;
+                };
+                cells.push(c);
+            }
+            let Ok(new_row) = state
+                .schema()
+                .node("table_row", Default::default(), cells, vec![])
+            else {
+                return false;
+            };
+            let mut rows = table.content().children().to_vec();
+            rows.push(new_row);
+            let Ok(new_table) = state
+                .schema()
+                .node("table", table.attrs().clone(), rows, vec![])
+            else {
+                return false;
+            };
+            replace_table(state, &rp, td, Some(new_table), Some((n_rows, 0)), dispatch);
+            true
+        } else {
+            if col > 0 {
+                dispatch_caret_to(state, table, tstart, row, col - 1, dispatch);
+                return true;
+            }
+            if row > 0 {
+                let prev_cols = table.child(row - 1).child_count();
+                dispatch_caret_to(state, table, tstart, row - 1, prev_cols - 1, dispatch);
+                return true;
+            }
+            // Already at the very first cell — let the binding fall through.
+            false
+        }
+    })
+}
+
+/// Move the caret to the next cell (left-to-right, top-to-bottom). Past the
+/// last cell it appends a new row. Bound to `Tab`.
+pub fn go_to_next_cell() -> Command {
+    go_to_cell(true)
+}
+
+/// Move the caret to the previous cell. A no-op at the first cell (so a
+/// chained binding such as the Lists lift can take over). Bound to
+/// `Shift-Tab`.
+pub fn go_to_prev_cell() -> Command {
+    go_to_cell(false)
 }

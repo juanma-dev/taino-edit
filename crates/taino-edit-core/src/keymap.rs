@@ -169,6 +169,26 @@ impl Keymap {
         self.bindings.insert(canonical, command);
     }
 
+    /// Add a binding, **chaining** it in front of any existing binding for
+    /// the same key rather than replacing it: the new command is tried
+    /// first and the previous one becomes its fallback. Because
+    /// well-behaved commands report `false` (and do nothing) when they
+    /// don't apply, this lets independent extensions cooperate on a shared
+    /// key — e.g. `Tab` running cell-navigation inside a table and
+    /// list-indent inside a list, each a no-op in the other's context.
+    pub fn add_chained(&mut self, spec: &str, command: Command) {
+        let canonical = self.normalize_spec(spec);
+        match self.bindings.remove(&canonical) {
+            Some(existing) => {
+                self.bindings
+                    .insert(canonical, chain(vec![command, existing]));
+            }
+            None => {
+                self.bindings.insert(canonical, command);
+            }
+        }
+    }
+
     /// Number of bindings.
     pub fn len(&self) -> usize {
         self.bindings.len()

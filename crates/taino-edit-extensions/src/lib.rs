@@ -49,7 +49,8 @@ pub use lists::{
 pub use paragraph::Paragraph;
 pub use table::{
     add_column_after, add_column_before, add_row_after, add_row_before, delete_column, delete_row,
-    delete_table, insert_table, toggle_header_cell, toggle_header_column, toggle_header_row, Table,
+    delete_table, go_to_next_cell, go_to_prev_cell, insert_table, toggle_header_cell,
+    toggle_header_column, toggle_header_row, Table,
 };
 pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 
@@ -103,12 +104,17 @@ pub fn build_schema_with(
 }
 
 /// Start from [`base_keymap`] for the platform and splice in every
-/// extension's bindings. Later bindings override earlier ones.
+/// extension's bindings. When two extensions (or an extension and the
+/// base keymap) bind the same key, the bindings are **chained** — the
+/// later one is tried first and the earlier becomes its fallback — so
+/// independent extensions cooperate on shared keys (e.g. `Tab` doing
+/// cell-navigation in a table and list-indent in a list). Commands must
+/// report `false` when they don't apply for this to compose cleanly.
 pub fn build_keymap_with(extensions: &[&dyn Extension], schema: &Schema, mac: bool) -> Keymap {
     let mut km = base_keymap(mac);
     for ext in extensions {
         for (key, cmd) in ext.keymap_entries(schema) {
-            km.add(&key, cmd);
+            km.add_chained(&key, cmd);
         }
     }
     km

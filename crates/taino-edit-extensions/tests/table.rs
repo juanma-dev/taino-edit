@@ -1,12 +1,14 @@
 //! v0.3 — the `Table` structural extension.
 
+use taino_edit_core::KeyPress;
 use taino_edit_core::{
     AttrValue, Command, EditorState, NodeSpec, Schema, SchemaBuilder, Selection,
 };
 use taino_edit_extensions::{
-    add_column_after, add_column_before, add_row_after, build_schema_with, delete_column,
-    delete_row, delete_table, insert_table, toggle_header_cell, toggle_header_column,
-    toggle_header_row, Extension, Paragraph, Table,
+    add_column_after, add_column_before, add_row_after, build_keymap_with, build_schema_with,
+    delete_column, delete_row, delete_table, go_to_next_cell, go_to_prev_cell, insert_table,
+    toggle_header_cell, toggle_header_column, toggle_header_row, Extension, Lists, Paragraph,
+    Table,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -217,6 +219,84 @@ fn header_round_trips_through_html() {
         first_cell.attrs().get("header"),
         Some(&AttrValue::from(true)),
         "header attr lost on round-trip"
+    );
+}
+
+#[test]
+fn go_to_next_cell_advances_caret() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    // After insert, caret sits in cell (0,0) at the table-start + 4.
+    let start = s.selection().from();
+    let s = run(s, &go_to_next_cell());
+    // Next cell (0,1) is one empty-cell width (4 positions) further on.
+    assert_eq!(s.selection().from(), start + 4);
+}
+
+#[test]
+fn go_to_next_cell_at_end_appends_a_row() {
+    let s = run(doc_with_paragraph(), &insert_table(1, 2));
+    // Move: (0,0) -> (0,1) -> past end appends a row.
+    let s = run(s, &go_to_next_cell());
+    let s = run(s, &go_to_next_cell());
+    assert_eq!(dims(&s.doc().to_html()), (2, 2));
+}
+
+#[test]
+fn go_to_prev_cell_moves_back_and_stops_at_first() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let in_first = s.selection().from();
+    let s = run(s, &go_to_next_cell()); // (0,1)
+    let s = run(s, &go_to_prev_cell()); // back to (0,0)
+    assert_eq!(s.selection().from(), in_first);
+    // At the first cell, prev does not apply.
+    assert!(!go_to_prev_cell()(&s, None));
+}
+
+#[test]
+fn tab_navigation_coexists_with_lists_via_chained_keymap() {
+    // A schema with BOTH Lists and Table. `Tab` must navigate cells when
+    // the caret is in a table — even though Lists also binds Tab.
+    let base = SchemaBuilder::new()
+        .node(
+            "doc",
+            NodeSpec {
+                content: Some("block+".into()),
+                ..Default::default()
+            },
+        )
+        .node(
+            "text",
+            NodeSpec {
+                group: Some("inline".into()),
+                ..Default::default()
+            },
+        );
+    let schema = build_schema_with(base, &[&Paragraph, &Lists, &Table], "doc").unwrap();
+    let t = schema.text("hi", vec![]).unwrap();
+    let p = schema
+        .node("paragraph", Default::default(), vec![t], vec![])
+        .unwrap();
+    let doc = schema
+        .node("doc", Default::default(), vec![p], vec![])
+        .unwrap();
+    let st = EditorState::new(doc, schema.clone());
+    let mut tr = st.tr();
+    tr.set_selection(Selection::caret(1));
+    let st = run(st.apply(tr), &insert_table(2, 2));
+    let start = st.selection().from();
+
+    let keymap = build_keymap_with(&[&Paragraph, &Lists, &Table], &schema, false);
+    let mut next = None;
+    {
+        let mut d = |tx| next = Some(st.apply(tx));
+        let handled = keymap.handle(&st, &KeyPress::key("Tab"), Some(&mut d));
+        assert!(handled, "Tab must be handled inside a table");
+    }
+    let st2 = next.expect("Tab dispatched");
+    assert_eq!(
+        st2.selection().from(),
+        start + 4,
+        "Tab should move to the next cell"
     );
 }
 

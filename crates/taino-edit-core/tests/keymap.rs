@@ -188,3 +188,46 @@ fn unknown_key_is_unhandled() {
     assert!(!km.handle(&st, &KeyPress::key("F5"), None));
     assert!(km.len() >= 8);
 }
+
+#[test]
+fn add_chained_tries_new_command_first_then_falls_back() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use taino_edit_core::{Command, Keymap};
+
+    // Two commands on the same key. `first` only applies when the doc text
+    // is "a"; `second` is the fallback. add_chained should run `first`
+    // when it applies, else fall back to `second`.
+    let order = Rc::new(Cell::new(""));
+
+    let o1 = order.clone();
+    let first: Command = Box::new(move |state, _| {
+        if state.doc().text_content() == "a" {
+            o1.set("first");
+            true
+        } else {
+            false
+        }
+    });
+    let o2 = order.clone();
+    let second: Command = Box::new(move |_state, _| {
+        o2.set("second");
+        true
+    });
+
+    let mut km = Keymap::new(false, vec![]);
+    km.add("Tab", second);
+    km.add_chained("Tab", first); // `first` is tried before `second`
+
+    let s = schema();
+
+    // Doc "a" → `first` applies.
+    let st_a = EditorState::new(doc(&s, vec!["a"]), s.clone());
+    assert!(km.handle(&st_a, &KeyPress::key("Tab"), None));
+    assert_eq!(order.get(), "first");
+
+    // Doc "b" → `first` declines, chain falls back to `second`.
+    let st_b = EditorState::new(doc(&s, vec!["b"]), s.clone());
+    assert!(km.handle(&st_b, &KeyPress::key("Tab"), None));
+    assert_eq!(order.get(), "second");
+}
