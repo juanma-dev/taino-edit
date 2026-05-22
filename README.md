@@ -13,36 +13,45 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: v0.2.0 released
+## Status: v0.3.0 released
 
-Six crates on crates.io. v0.2 closes the v0.1 list UX gaps and broadens
-the platform (Plugin trait, Markdown round-trip, Dioxus adapter ships
-real functionality). Tests pass workspace-wide:
+Seven crates on crates.io. v0.3 adds **full tables** (span-correct
+structural editing, cell selection + merge/split, and pointer
+interaction) on a new reusable `ViewPlugin` platform, and brings the
+Dioxus adapter to event-wiring parity with Leptos. Tests pass
+workspace-wide:
 
 | | |
 |---|---|
-| Host tests | **145** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, plugin registry, Markdown serializer + parser, and **12 extensions** including the full list UX) |
-| Browser tests | **52** `wasm_bindgen_test` cases in headless Chromium 148 (mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos component + event wiring) |
+| Host tests | **184** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, plugin registry, Markdown serializer + parser, the `Selection::Cell` variant, and **13 extensions** including the full table command set) |
+| Browser tests | wasm-bindgen cases in headless Chromium 148 — mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos + Dioxus component/event wiring, **table rendering**, the **`ViewPlugin` infra**, and **`TableView` pointer interaction** (cell drag-select, highlight, resize) |
 
 See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the
 scope budget, and the resolved design decisions; **[ROADMAP.md](ROADMAP.md)**
-tracks phase progress and what's deferred to v0.2.
+tracks phase progress and what's deferred.
 
-## What's new in v0.2 (2026-05-21)
+## What's new in v0.3 (2026-05-22)
 
-- **Complete list UX**: smart Enter inside a list item splits the
-  list_item (new bullet below), empty bullet + Enter exits the list,
-  `Tab` nests under the previous sibling, `Shift-Tab` lifts out, and
-  multi-item lift now preserves surviving siblings.
-- **`Plugin` trait + `PluginKey` + typed-state registry** in `core`:
-  third-party stateful components (word counters, autosave, future
-  CRDT bridges) plug into `EditorState` without forking core.
-- **Markdown round-trip**: `taino_edit_core::markdown::{to_markdown,
-  parse_markdown}` + `EditorView::paste_markdown`; the Leptos adapter
-  prefers `text/markdown` on paste when the clipboard advertises it.
-- **`taino-edit-dioxus`** ships as a real, minimum-viable adapter
-  (mount + DOM patch on signal change). [`examples/basic-dioxus`](examples/basic-dioxus/)
-  builds with `dx serve`.
+- **Full tables** — a `Table` extension (`table`/`table_row`/`table_cell`
+  with colspan/rowspan/header/colwidth) whose every command is
+  **span-correct**: insert, add/delete rows & columns, header toggle,
+  Tab cell-navigation, cell-range selection, merge/split, and column
+  resize. A logical-grid placement model + compaction render guarantee
+  no orphan spans or empty rows under any sequence of edits.
+- **`ViewPlugin` platform** (`taino-edit-dom`) — DOM-aware event +
+  decoration hooks so an extension can add real pointer interaction
+  without coupling the generic adapter to it. New crate
+  **`taino-edit-table-view`** implements table cell drag-select,
+  selection highlight and column-resize on top of it; the Leptos
+  `<TainoEditor>` takes an optional `plugins` prop.
+- **Dioxus adapter parity** — input → transform, IME, paste and
+  `selectionchange` all wired, matching the Leptos adapter.
+
+## What shipped in v0.2 (2026-05-21)
+
+- **Complete list UX** (smart Enter / sink / lift), the **`Plugin`
+  trait** + typed-state registry, **Markdown** round-trip, and the
+  first real **Dioxus** adapter.
 
 ## What ships in v0.1
 
@@ -94,17 +103,20 @@ and richer extensions (tables, footnotes, mentions, math).
 
 | Crate                                                  | Role                                                              |
 | ------------------------------------------------------ | ----------------------------------------------------------------- |
-| [`taino-edit-core`](crates/taino-edit-core)             | Framework-agnostic model, transforms, state, history, commands, keymap, input rules |
-| [`taino-edit-dom`](crates/taino-edit-dom)               | `contenteditable`/DOM bridge (`web-sys`, `wasm-bindgen`, `js-sys`) |
-| [`taino-edit-extensions`](crates/taino-edit-extensions) | `Bold`/`Italic`/`Heading`/`Paragraph`/`History`, plus the `Extension` trait |
-| [`taino-edit-leptos`](crates/taino-edit-leptos)         | Leptos adapter (`<TainoEditor>`); first-class for v0.1            |
-| [`taino-edit-dioxus`](crates/taino-edit-dioxus)         | Placeholder, reserved for v0.2                                    |
+| [`taino-edit-core`](crates/taino-edit-core)             | Framework-agnostic model, transforms, state, history, commands, keymap, input rules, Markdown, `Plugin` trait |
+| [`taino-edit-dom`](crates/taino-edit-dom)               | `contenteditable`/DOM bridge + `ViewPlugin` (`web-sys`, `wasm-bindgen`, `js-sys`) |
+| [`taino-edit-extensions`](crates/taino-edit-extensions) | The 13 built-in extensions (marks, blocks, lists, tables, …) + the `Extension` trait |
+| [`taino-edit-leptos`](crates/taino-edit-leptos)         | Leptos adapter (`<TainoEditor>`)                                  |
+| [`taino-edit-dioxus`](crates/taino-edit-dioxus)         | Dioxus adapter (`<TainoEditor>`)                                  |
+| [`taino-edit-table-view`](crates/taino-edit-table-view) | Table pointer interaction (cell drag-select, resize) as a `ViewPlugin` |
 | [`taino-edit`](crates/taino-edit)                       | Umbrella crate, feature-gated re-exports                           |
 
 Examples under [`examples/`](examples/):
 
 - [`basic-leptos`](examples/basic-leptos) — a `trunk serve`-buildable demo
-  with Bold/Undo/Redo buttons and a mounted editor.
+  with the full toolbar, tables (drag-select / merge / resize) and live
+  JSON + HTML panels.
+- [`basic-dioxus`](examples/basic-dioxus) — the same editor in Dioxus.
 - [`headless-core`](examples/headless-core) — server-side / CLI demo
   proving `taino-edit-core` runs identically without a DOM.
 
@@ -112,10 +124,11 @@ Examples under [`examples/`](examples/):
 
 ```toml
 [dependencies]
-taino-edit = { version = "0.2", features = ["leptos"] }  # or "dioxus"
+taino-edit = { version = "0.3", features = ["leptos"] }  # or "dioxus"
 ```
 
-No adapter is enabled by default — pick `leptos` or `dioxus`.
+No adapter is enabled by default — pick `leptos` or `dioxus`. Add the
+`table-view` feature for table pointer interaction.
 
 ## Use it (Leptos)
 

@@ -11,10 +11,11 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.2.0` — list UX + Plugin trait + Markdown + Dioxus    |
-| **Last updated**             | 2026-05-21                                               |
+| **Current release**          | `v0.3.0` — full tables + ViewPlugin platform + Dioxus parity |
+| **Last updated**             | 2026-05-22                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
+| **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|
 | **Effort estimate to v0.1**  | 2–4 months full-time solo (~11–15k LOC, excluding tests) |
 | **First framework adapter**  | Leptos                                                   |
 | **License**                  | MIT OR Apache-2.0                                        |
@@ -258,12 +259,28 @@ gate and it is green.
 
 ---
 
-## Deferred (v0.3+)
+## v0.3 — Shipped 2026-05-22
+
+**Goal:** full tables, done at production quality, on a reusable
+pointer-interaction platform.
+
+- [x] `Table` extension: `table`/`table_row`/`table_cell`, colspan/rowspan/header/colwidth, HTML round-trip
+- [x] Structural commands (insert, add/delete row & column, delete table, header toggle) — **span-correct** via a logical-grid placement model + compaction render
+- [x] `Selection::Cell` core variant; `TableMap`; `select_cell_range`, `merge_cells`, `split_cell`
+- [x] `set_column_width`; Tab/Shift-Tab cell navigation (chained keymap so it coexists with Lists)
+- [x] `ViewPlugin` infrastructure in `taino-edit-dom` (DOM-aware event + decoration hooks, `pos_at_point`, nested-node decorations)
+- [x] New crate `taino-edit-table-view` — `TableView`: cell drag-select, selection highlight, column-resize
+- [x] Leptos `<TainoEditor>` `plugins` prop + pointer wiring; `basic-leptos` table toolbar + drag/resize
+- [x] Interaction + invariant host tests + headless-Chromium browser tests (table rendering, ViewPlugin infra, TableView)
+
+## Deferred (v0.4+)
 
 - 💤 `schema!{}` proc-macro DSL — sugar over the v0.1 builder
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
-- 💤 Richer extensions on top of v0.1's 12: tables, footnotes, mentions, math/KaTeX, embed
-- 💤 `Decoration` API for third-party inline UI (mentions, comments)
+- 💤 Richer extensions: footnotes, mentions, math/KaTeX, embed
+- 💤 Wire `TableView` into the Dioxus adapter (the plugin is framework-agnostic; only the Leptos adapter wires pointer events so far)
+- 💤 Formal `wasm_bindgen_test` browser tests for the Dioxus adapter
+- 💤 Inline (range-level) decorations for third-party UI (search highlight, comments)
 - 💤 Server-side rendering of the initial document (Leptos SSR)
 
 ## Out of scope for v0.1 (community contributions welcome)

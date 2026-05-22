@@ -8,6 +8,29 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-22
+
+Full tables — schema, span-correct structural editing, cell selection +
+merge/split, and pointer interaction (cell drag-select, column resize) —
+on a new reusable `ViewPlugin` platform. Plus the Dioxus adapter reaches
+event-wiring parity with Leptos.
+
+### Highlights
+
+- A complete **`Table`** extension (`table`/`table_row`/`table_cell`,
+  colspan/rowspan/header/colwidth) whose every command is **span-correct**
+  — interleaving merge with add/delete row/column can never produce an
+  orphan span or an empty row (enforced by a logical-grid placement model
+  + compaction render, covered by interaction + invariant tests).
+- A new **`ViewPlugin`** infrastructure in `taino-edit-dom` (DOM-aware
+  event + decoration hooks, `pos_at_point`, nested-node decorations) and a
+  new crate **`taino-edit-table-view`** implementing table cell
+  drag-select, selection highlight and column-resize on top of it.
+- The **Dioxus adapter** now has full event-wiring parity with Leptos.
+- 184 host tests + the wasm-bindgen browser suite (incl. table rendering,
+  the ViewPlugin infra, and TableView pointer interaction) all pass in
+  headless Chromium 148.
+
 ### Added
 
 - **`Table` extension** — a full table feature set:
@@ -335,6 +358,7 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     caret are reflected visually. Both directions guard against echo
     loops via an `applying_selection` flag.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.1.0

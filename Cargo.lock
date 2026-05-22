@@ -2439,18 +2439,19 @@ dependencies = [
 
 [[package]]
 name = "taino-edit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "taino-edit-core",
  "taino-edit-dioxus",
  "taino-edit-dom",
  "taino-edit-extensions",
  "taino-edit-leptos",
+ "taino-edit-table-view",
 ]
 
 [[package]]
 name = "taino-edit-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pulldown-cmark",
  "regex",
@@ -2460,7 +2461,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-dioxus"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dioxus",
  "taino-edit-core",
@@ -2472,7 +2473,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-dom"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "js-sys",
  "serde_json",
@@ -2485,7 +2486,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-extensions"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "taino-edit-core",
@@ -2493,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-leptos"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "gloo-timers",
  "leptos",
@@ -2507,7 +2508,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-table-view"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "taino-edit-core",
  "taino-edit-dom",

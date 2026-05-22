@@ -1,6 +1,6 @@
 [package]
 name = "taino-edit"
-description = "Native Rust WYSIWYG rich-text editor framework for Leptos (Dioxus reserved for v0.2). Pure Rust, no JS bridge."
+description = "Native Rust WYSIWYG rich-text editor framework for Leptos and Dioxus. Pure Rust, no JS bridge. Typed model, transforms, history, and extensions including full tables."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,7 @@ taino-edit-dom = { workspace = true, optional = true }
 taino-edit-extensions = { workspace = true, optional = true }
 taino-edit-leptos = { workspace = true, optional = true }
 taino-edit-dioxus = { workspace = true, optional = true }
+taino-edit-table-view = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -24,6 +25,8 @@ extensions = ["dep:taino-edit-extensions"]
 dom = ["dep:taino-edit-dom"]
 leptos = ["dep:taino-edit-leptos", "dom", "extensions"]
 dioxus = ["dep:taino-edit-dioxus"]
+# Table pointer interaction (cell drag-select, resize). Needs dom + extensions.
+table-view = ["dep:taino-edit-table-view", "dom", "extensions"]
 
 [package.metadata.docs.rs]
 all-features = true

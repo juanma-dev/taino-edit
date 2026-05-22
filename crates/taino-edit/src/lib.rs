@@ -9,15 +9,14 @@
 //! | Feature      | Re-exports                                            |
 //! |--------------|-------------------------------------------------------|
 //! | *(always)*   | [`core`] — document model, transforms, state, commands |
-//! | `extensions` | [`extensions`] — bold, italic, heading, …             |
-//! | `dom`        | [`dom`] — the contenteditable bridge                  |
+//! | `extensions` | [`extensions`] — bold, italic, heading, link, image, lists, tables, … |
+//! | `dom`        | [`dom`] — the contenteditable bridge + `ViewPlugin`   |
 //! | `leptos`     | [`leptos`] — the Leptos adapter (implies `dom`+`extensions`) |
-//! | `dioxus`     | [`dioxus`] — placeholder, reserved for v0.2            |
+//! | `dioxus`     | [`dioxus`] — the Dioxus adapter                       |
+//! | `table-view` | [`table_view`] — table pointer interaction (cell drag-select, resize) |
 //!
 //! No adapter is enabled by default; choose one, e.g.
-//! `taino-edit = { version = "0.1", features = ["leptos"] }`.
-//!
-//! Status: **pre-implementation** — see `ROADMAP.md`.
+//! `taino-edit = { version = "0.3", features = ["leptos"] }`.
 
 #![deny(unsafe_code)]
 #![forbid(unstable_features)]
@@ -36,3 +35,6 @@ pub use taino_edit_leptos as leptos;
 
 #[cfg(feature = "dioxus")]
 pub use taino_edit_dioxus as dioxus;
+
+#[cfg(feature = "table-view")]
+pub use taino_edit_table_view as table_view;
