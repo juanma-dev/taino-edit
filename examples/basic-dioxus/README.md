@@ -32,12 +32,11 @@ demo at <http://127.0.0.1:8080>.
 
 ## Status
 
-v0.2 of the Dioxus adapter is a **minimum-viable adapter**: mount + DOM
-patching work end-to-end so changes to the `Signal<EditorState>` are
-reflected in the rendered editor. Full event-wiring parity with the
-Leptos adapter (input → transform round-trip, IME composition, paste,
-`selectionchange`) lands in v0.2.x — the `taino-edit-dom` pieces it
-needs are already in place.
+The Dioxus adapter now has **full event-wiring parity** with the Leptos
+one: mount + incremental DOM patching, plus `input` → transform
+round-trip, IME composition, sanitized paste (Markdown / HTML / text),
+and `selectionchange` mirroring. Type into the editor and the live HTML
++ JSON panels track the document state.
 
-For a production-grade demo today see
-[`../basic-leptos`](../basic-leptos).
+See [`../basic-leptos`](../basic-leptos) for the toolbar-driven demo
+(every extension wired to buttons).

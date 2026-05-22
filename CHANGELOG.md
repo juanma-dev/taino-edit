@@ -8,6 +8,20 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dioxus adapter — full event-wiring parity.** `taino-edit-dioxus`
+  now wires `input` (→ transform round-trip), IME `compositionstart` /
+  `compositionend`, `paste` (Markdown / HTML / plain-text, sanitized
+  through core), and document `selectionchange` — the same raw `web-sys`
+  listeners the Leptos adapter uses, kept alive in the component's
+  runtime slot. Typing in a Dioxus-hosted editor now commits to the
+  state signal (verified end-to-end in headless Chromium). This closes
+  the v0.2.0 "minimum-viable adapter" gap.
+- `examples/basic-dioxus` gains live HTML + JSON panels (mirrors the
+  Leptos demo) and a `<div id="main">` mount target + trunk `index.html`
+  so it serves under both `dx serve` and `trunk serve`.
+
 ## [0.2.0] - 2026-05-21
 
 Closes the v0.1 list UX gaps and broadens the platform: a second
