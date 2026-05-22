@@ -12,4 +12,5 @@ leptos = { version = "0.8.3", features = ["csr"] }
 serde_json = "1"
 taino-edit-extensions = { path = "../../crates/taino-edit-extensions" }
 taino-edit-leptos = { path = "../../crates/taino-edit-leptos" }
+taino-edit-table-view = { path = "../../crates/taino-edit-table-view" }
 web-sys = { version = "0.3", features = ["Window"] }

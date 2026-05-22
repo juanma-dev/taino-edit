@@ -30,8 +30,28 @@ Pre-1.0, minor version bumps may include breaking API changes.
     cell → 1×1 cells).
   - **Column resize**: `colwidth` attr serialized as `style="width:
     Npx"`, set via `set_column_width(col, width)`.
+  - **Span-correct everywhere**: every structural command (and merge/
+    split) goes through a logical-grid placement model + compaction
+    render, so they can never leave an orphan `rowspan`/`colspan` or an
+    empty `<tr>` — even when interleaved (merge then add-column, delete
+    through a span, …). Verified by interaction + invariant tests.
   - The `basic-leptos` demo gains a table toolbar (insert / row / column
     / header / merge / split / resize / delete).
+- **`ViewPlugin` infrastructure** (`taino-edit-dom`): a DOM-aware plugin
+  trait (`handle_event` → `ViewAction::Select`/`Command`, `decorations`)
+  that `EditorView` consults, plus the `pos_at_point` / `node_dom_at`
+  primitives and recursive (nested-node) decoration support. Adapters
+  wire pointer events to `EditorView::handle_view_event` and refresh
+  plugin decorations via `refresh_view_decorations`. The Leptos
+  `<TainoEditor>` gains an optional `plugins` prop and the pointer
+  wiring.
+- **`taino-edit-table-view` crate** — `TableView`, a `ViewPlugin` giving
+  tables their pointer interaction: **cell drag-select** (build a
+  `Selection::Cell` by dragging), **selection highlight** (covered cells
+  get `taino-cell-selected` via decorations), and **column resize**
+  (drag near a cell's right border → `set_column_width`). Verified
+  end-to-end in headless Chromium, including in the live `basic-leptos`
+  demo.
 - **`Selection::Cell { anchor, head }`** in `taino-edit-core` — a
   positional table cell-range selection (table-aware code interprets the
   rectangle; `core` handles `from`/`to`/`map` generically).

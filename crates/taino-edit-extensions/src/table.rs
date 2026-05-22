@@ -3,10 +3,10 @@
 //!
 //! Cells carry `colspan` / `rowspan` / `header` / `colwidth` attrs and
 //! round-trip as `<table><tr><td>` / `<th>`. Every structural command is
-//! **span-aware**: they decompose the table into a list of [`Placement`]s
+//! **span-aware**: they decompose the table into a list of placements
 //! (cells with logical-grid coordinates + spans), transform that list, and
-//! re-render through [`render_placements`], which compacts rows/columns
-//! that become fully span-covered and recomputes every span against the
+//! re-render through a compaction step that drops rows/columns which
+//! become fully span-covered and recomputes every span against the
 //! compacted grid. The result is always a well-formed, rectangular table —
 //! merging, splitting, adding and deleting rows/columns can never leave an
 //! orphan `rowspan`/`colspan` or an empty `<tr>`.

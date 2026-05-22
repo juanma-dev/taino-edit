@@ -29,7 +29,7 @@ pub use taino_edit_core::{
 };
 /// Re-export the DOM-bridge surface that the Leptos adapter wraps.
 #[doc(no_inline)]
-pub use taino_edit_dom::{Decoration, EditorView, ViewDesc};
+pub use taino_edit_dom::{Decoration, EditorView, ViewAction, ViewDesc, ViewPlugin};
 
 /// A Leptos component that renders an editor backed by a
 /// `RwSignal<EditorState>`. Whenever the signal changes, the mounted DOM is
@@ -52,12 +52,22 @@ pub fn TainoEditor(
     /// it on mount and applies an incremental DOM patch every time it
     /// changes; browser-side edits are committed back through it.
     state: RwSignal<EditorState>,
+    /// Optional DOM-aware [`ViewPlugin`]s (e.g. `TableView` for table
+    /// cell-drag-select + resize). Installed on the view at mount; the
+    /// component wires pointer events to them and refreshes their
+    /// decorations on every state change.
+    #[prop(optional)]
+    plugins: Vec<Box<dyn ViewPlugin>>,
 ) -> impl IntoView {
     let node_ref = NodeRef::<leptos::html::Div>::new();
     // `EditorView` + its event closures are `!Send + !Sync`. Keep them in
     // Leptos's local-storage slot so the (Send+Sync) effect closures can
     // reach them through a Copy handle without capturing the value itself.
     let runtime: StoredValue<Option<EditorRuntime>, LocalStorage> = StoredValue::new_local(None);
+    // Plugins are `!Send` and consumed once at mount; park them in a
+    // local slot the mount branch takes from.
+    let plugins_slot: StoredValue<Option<Vec<Box<dyn ViewPlugin>>>, LocalStorage> =
+        StoredValue::new_local(Some(plugins));
 
     Effect::new(move |_| {
         let snapshot = state.get();
@@ -77,14 +87,23 @@ pub fn TainoEditor(
                     let _ = r.view.set_selection(snapshot.selection());
                     r.applying_selection.set(false);
                 }
+                // Refresh plugin decorations (e.g. table cell-selection
+                // highlight) for the current selection.
+                r.view.refresh_view_decorations(Some(snapshot.selection()));
             }
             None => {
                 let element: web_sys::Element = div.unchecked_into();
-                let view = EditorView::mount(
+                let mut view = EditorView::mount(
                     snapshot.doc().clone(),
                     snapshot.schema().clone(),
                     element.clone(),
                 );
+                let plugins = plugins_slot
+                    .try_update_value(|p| p.take())
+                    .flatten()
+                    .unwrap_or_default();
+                view.set_view_plugins(plugins);
+                view.refresh_view_decorations(Some(snapshot.selection()));
                 let applying = std::rc::Rc::new(std::cell::Cell::new(false));
                 let closures = wire_events(&element, runtime, state, applying.clone());
                 *rt = Some(EditorRuntime {
@@ -220,6 +239,18 @@ fn wire_events(
             }
         });
         register("paste", cb);
+
+        // Pointer events → view plugins (table cell-drag-select, resize).
+        // Each fires `handle_view_event`; a returned action is applied to
+        // state. No-op when no plugin claims the event.
+        for kind in ["mousedown", "mousemove", "mouseup"] {
+            let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+                if let Some(Some(action)) = with_view(runtime, |v| v.handle_view_event(&ev)) {
+                    apply_view_action(state, action);
+                }
+            });
+            register(kind, cb);
+        }
     }
 
     // `selectionchange` only fires on `document`; mirror the browser
@@ -269,4 +300,29 @@ fn apply_transform(state: RwSignal<EditorState>, tr: &Transform) {
         }
         *s = s.apply(tx);
     });
+}
+
+/// Apply a [`ViewAction`] produced by a view plugin to the state signal.
+fn apply_view_action(state: RwSignal<EditorState>, action: ViewAction) {
+    match action {
+        ViewAction::Select(sel) => {
+            state.update(|s| {
+                let mut tx = s.tr();
+                tx.set_selection(sel);
+                tx.no_history();
+                *s = s.apply(tx);
+            });
+        }
+        ViewAction::Command(cmd) => {
+            let snapshot = state.get_untracked();
+            let mut next = None;
+            {
+                let mut d = |tx: Transaction| next = Some(snapshot.apply(tx));
+                cmd(&snapshot, Some(&mut d));
+            }
+            if let Some(n) = next {
+                state.set(n);
+            }
+        }
+    }
 }

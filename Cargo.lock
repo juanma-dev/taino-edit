@@ -122,6 +122,7 @@ dependencies = [
  "serde_json",
  "taino-edit-extensions",
  "taino-edit-leptos",
+ "taino-edit-table-view",
  "web-sys",
 ]
 

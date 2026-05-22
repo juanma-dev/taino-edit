@@ -290,7 +290,10 @@ fn App() -> impl IntoView {
             </div>
 
             <div on:keydown=on_keydown>
-                <TainoEditor state=state />
+                <TainoEditor
+                    state=state
+                    plugins=vec![Box::new(taino_edit_table_view::TableView::new()) as Box<dyn taino_edit_leptos::ViewPlugin>]
+                />
             </div>
 
             <section style="margin-top:1.5rem; display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
