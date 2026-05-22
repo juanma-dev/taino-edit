@@ -1,19 +1,22 @@
-//! Tables — `table` / `table_row` / `table_cell` nodes plus structural
-//! commands (insert table, add/delete rows and columns, delete table).
+//! Tables — `table` / `table_row` / `table_cell` nodes plus the command
+//! vocabulary a table-aware editor needs.
 //!
-//! v0.3 ships a **structural** table MVP: the schema, an HTML round-trip
-//! (`<table><tr><td>…`), and commands that operate on the cell containing
-//! the caret. Cell-range selection, merge/split, column resizing, header
-//! toggling and Tab cell-navigation are deliberately deferred — they need
-//! a dedicated `CellSelection` and DOM-level drag handling that are their
-//! own body of work.
+//! Cells carry `colspan` / `rowspan` / `header` attrs and round-trip as
+//! `<table><tr><td>` / `<th>` (with the span attributes). Structural
+//! commands (`insert_table`, add/delete rows and columns, `delete_table`,
+//! the `toggle_header_*` family) operate on the cell containing the caret
+//! and rebuild the enclosing `table` node wholesale — tables are small, so
+//! the O(table size) rebuild is cheap and keeps the position arithmetic
+//! obviously correct.
 //!
-//! All structural commands rebuild the enclosing `table` node and replace
-//! it wholesale. Tables are small, so the O(table size) rebuild is cheap
-//! and keeps the position arithmetic obviously correct.
+//! Cell-range selection (`CellSelection`), merge/split and column resizing
+//! build on this foundation in later phases.
+
+use std::collections::HashMap;
 
 use taino_edit_core::{
-    Command, DomSpec, Fragment, Node, NodeSpec, ParseRule, ResolvedPos, Schema, Selection, Slice,
+    AttrSpec, AttrValue, Attrs, Command, DomSpec, Fragment, HtmlElement, Node, NodeSpec, ParseRule,
+    ResolvedPos, Schema, Selection, Slice,
 };
 
 use crate::{Extension, SchemaAdditions};
@@ -23,6 +26,78 @@ use crate::{Extension, SchemaAdditions};
 /// toolbar to wire (cell navigation would collide with the Lists `Tab`
 /// binding, so it's left to the host).
 pub struct Table;
+
+fn cell_attr_specs() -> HashMap<String, AttrSpec> {
+    let mut a = HashMap::new();
+    a.insert(
+        "colspan".to_string(),
+        AttrSpec {
+            default: Some(AttrValue::from(1u64)),
+        },
+    );
+    a.insert(
+        "rowspan".to_string(),
+        AttrSpec {
+            default: Some(AttrValue::from(1u64)),
+        },
+    );
+    a.insert(
+        "header".to_string(),
+        AttrSpec {
+            default: Some(AttrValue::from(false)),
+        },
+    );
+    a
+}
+
+fn cell_to_dom(n: &Node) -> DomSpec {
+    let header = n
+        .attrs()
+        .get("header")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let mut spec = DomSpec::element(if header { "th" } else { "td" });
+    let colspan = n
+        .attrs()
+        .get("colspan")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1);
+    let rowspan = n
+        .attrs()
+        .get("rowspan")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1);
+    if colspan != 1 {
+        spec = spec.attr("colspan", colspan.to_string());
+    }
+    if rowspan != 1 {
+        spec = spec.attr("rowspan", rowspan.to_string());
+    }
+    spec
+}
+
+fn cell_attrs_from(el: &HtmlElement, header: bool) -> Option<Attrs> {
+    let mut a = Attrs::new();
+    a.insert("header".into(), AttrValue::from(header));
+    let colspan = el
+        .attr("colspan")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(1);
+    let rowspan = el
+        .attr("rowspan")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(1);
+    a.insert("colspan".into(), AttrValue::from(colspan));
+    a.insert("rowspan".into(), AttrValue::from(rowspan));
+    Some(a)
+}
+
+fn td_attrs(el: &HtmlElement) -> Option<Attrs> {
+    cell_attrs_from(el, false)
+}
+fn th_attrs(el: &HtmlElement) -> Option<Attrs> {
+    cell_attrs_from(el, true)
+}
 
 impl Extension for Table {
     fn name(&self) -> &str {
@@ -36,8 +111,12 @@ impl Extension for Table {
                     "table_cell".to_string(),
                     NodeSpec {
                         content: Some("block+".into()),
-                        to_dom: Some(|_| DomSpec::element("td")),
-                        parse_dom: vec![ParseRule::tag("td"), ParseRule::tag("th")],
+                        attrs: cell_attr_specs(),
+                        to_dom: Some(cell_to_dom),
+                        parse_dom: vec![
+                            ParseRule::with_attrs("td", td_attrs),
+                            ParseRule::with_attrs("th", th_attrs),
+                        ],
                         ..Default::default()
                     },
                 ),
@@ -389,4 +468,113 @@ pub fn delete_table() -> Command {
         replace_table(state, &rp, td, None, None, dispatch);
         true
     })
+}
+
+// ---- header toggling -----------------------------------------------------
+
+/// Set the `header` attr on a cell, returning a rebuilt cell node.
+fn with_header(schema: &Schema, cell: &Node, header: bool) -> Option<Node> {
+    let mut attrs = cell.attrs().clone();
+    attrs.insert("header".into(), AttrValue::from(header));
+    schema
+        .node(
+            "table_cell",
+            attrs,
+            cell.content().children().to_vec(),
+            cell.marks().to_vec(),
+        )
+        .ok()
+}
+
+/// Whether every cell in `cells` is already a header.
+fn all_header(cells: &[Node]) -> bool {
+    !cells.is_empty()
+        && cells.iter().all(|c| {
+            c.attrs()
+                .get("header")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        })
+}
+
+/// Which cells a header-toggle command targets.
+enum HeaderScope {
+    Row,
+    Column,
+    Cell,
+}
+
+fn toggle_header(scope: HeaderScope) -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, row, col)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+
+        // Decide the new header value by inverting the current state of the
+        // targeted cells.
+        let targeted: Vec<&Node> = match scope {
+            HeaderScope::Row => table.child(row).content().children().iter().collect(),
+            HeaderScope::Column => table
+                .content()
+                .iter()
+                .filter_map(|r| r.content().children().get(col))
+                .collect(),
+            HeaderScope::Cell => table
+                .child(row)
+                .content()
+                .children()
+                .get(col)
+                .into_iter()
+                .collect(),
+        };
+        if targeted.is_empty() {
+            return false;
+        }
+        let make_header = !all_header(&targeted.iter().map(|c| (*c).clone()).collect::<Vec<_>>());
+
+        let schema = state.schema();
+        let mut new_rows = Vec::with_capacity(table.child_count());
+        for (ri, r) in table.content().iter().enumerate() {
+            let mut cells = r.content().children().to_vec();
+            for (ci, cell) in cells.iter_mut().enumerate() {
+                let hit = match scope {
+                    HeaderScope::Row => ri == row,
+                    HeaderScope::Column => ci == col,
+                    HeaderScope::Cell => ri == row && ci == col,
+                };
+                if hit {
+                    let Some(updated) = with_header(schema, cell, make_header) else {
+                        return false;
+                    };
+                    *cell = updated;
+                }
+            }
+            let Ok(new_row) = schema.node("table_row", r.attrs().clone(), cells, vec![]) else {
+                return false;
+            };
+            new_rows.push(new_row);
+        }
+        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+            return false;
+        };
+        replace_table(state, &rp, td, Some(new_table), Some((row, col)), dispatch);
+        true
+    })
+}
+
+/// Toggle the `<th>`/`<td>` state of every cell in the caret's row.
+pub fn toggle_header_row() -> Command {
+    toggle_header(HeaderScope::Row)
+}
+/// Toggle the `<th>`/`<td>` state of every cell in the caret's column.
+pub fn toggle_header_column() -> Command {
+    toggle_header(HeaderScope::Column)
+}
+/// Toggle the `<th>`/`<td>` state of just the caret's cell.
+pub fn toggle_header_cell() -> Command {
+    toggle_header(HeaderScope::Cell)
 }

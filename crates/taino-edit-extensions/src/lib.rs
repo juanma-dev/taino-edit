@@ -49,7 +49,7 @@ pub use lists::{
 pub use paragraph::Paragraph;
 pub use table::{
     add_column_after, add_column_before, add_row_after, add_row_before, delete_column, delete_row,
-    delete_table, insert_table, Table,
+    delete_table, insert_table, toggle_header_cell, toggle_header_column, toggle_header_row, Table,
 };
 pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 

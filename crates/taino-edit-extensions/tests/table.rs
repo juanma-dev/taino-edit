@@ -1,9 +1,12 @@
 //! v0.3 — the `Table` structural extension.
 
-use taino_edit_core::{Command, EditorState, NodeSpec, Schema, SchemaBuilder, Selection};
+use taino_edit_core::{
+    AttrValue, Command, EditorState, NodeSpec, Schema, SchemaBuilder, Selection,
+};
 use taino_edit_extensions::{
     add_column_after, add_column_before, add_row_after, build_schema_with, delete_column,
-    delete_row, delete_table, insert_table, Extension, Paragraph, Table,
+    delete_row, delete_table, insert_table, toggle_header_cell, toggle_header_column,
+    toggle_header_row, Extension, Paragraph, Table,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -140,6 +143,81 @@ fn table_commands_are_noop_outside_a_table() {
     assert!(!add_row_after()(&s, None));
     assert!(!delete_row()(&s, None));
     assert!(!delete_table()(&s, None));
+}
+
+#[test]
+fn cell_declares_colspan_rowspan_header_attrs() {
+    let adds = Table.schema_additions();
+    let (_, cell_spec) = &adds.nodes[0];
+    assert!(cell_spec.attrs.contains_key("colspan"));
+    assert!(cell_spec.attrs.contains_key("rowspan"));
+    assert!(cell_spec.attrs.contains_key("header"));
+}
+
+#[test]
+fn toggle_header_row_emits_th() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    // Caret is in cell (0,0); toggle the header on its row.
+    let s = run(s, &toggle_header_row());
+    let html = s.doc().to_html();
+    // First row's cells become <th>; second row stays <td>.
+    let first_row = html.split("<tr>").nth(1).unwrap();
+    assert_eq!(
+        first_row.matches("<th>").count(),
+        2,
+        "row 0 should be all th: {html}"
+    );
+    let second_row = html.split("<tr>").nth(2).unwrap();
+    assert!(second_row.contains("<td>"), "row 1 should stay td: {html}");
+
+    // Toggling again flips back to <td>.
+    let s = run(s, &toggle_header_row());
+    assert!(!s.doc().to_html().contains("<th>"));
+}
+
+#[test]
+fn toggle_header_column_emits_th_in_each_row() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &toggle_header_column());
+    let html = s.doc().to_html();
+    // Column 0 of both rows becomes <th>.
+    assert_eq!(
+        html.matches("<th>").count(),
+        2,
+        "expected 2 th (one per row): {html}"
+    );
+}
+
+#[test]
+fn toggle_header_cell_emits_single_th() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &toggle_header_cell());
+    let html = s.doc().to_html();
+    assert_eq!(
+        html.matches("<th>").count(),
+        1,
+        "expected exactly 1 th: {html}"
+    );
+}
+
+#[test]
+fn header_round_trips_through_html() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &toggle_header_row());
+    let html = s.doc().to_html();
+    let parsed = s.schema().parse_html(&html).expect("parse");
+    // The reparsed first row's first cell must still be a header.
+    let table = parsed
+        .content()
+        .iter()
+        .find(|n| n.node_type().name() == "table")
+        .expect("table present");
+    let first_cell = table.child(0).child(0);
+    assert_eq!(
+        first_cell.attrs().get("header"),
+        Some(&AttrValue::from(true)),
+        "header attr lost on round-trip"
+    );
 }
 
 #[test]
