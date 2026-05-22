@@ -8,6 +8,19 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`Table` extension** (structural MVP): `table` / `table_row` /
+  `table_cell` nodes with a `<table><tr><td>` HTML round-trip, plus
+  commands `insert_table(rows, cols)`, `add_row_before` / `add_row_after`
+  / `delete_row`, `add_column_before` / `add_column_after` /
+  `delete_column`, and `delete_table`. Each operates on the cell
+  containing the caret and rebuilds the table wholesale (small tables;
+  obviously-correct position math). Deleting the last row or column
+  removes the whole table. No default keymap — commands are exported for
+  a host toolbar. Cell-range selection, merge/split, column resizing,
+  header toggling and Tab cell-navigation are deliberately deferred.
+
 ### Docs
 
 - Recorded the decision to keep `History` as a first-class `EditorState`

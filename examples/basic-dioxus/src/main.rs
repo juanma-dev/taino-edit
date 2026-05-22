@@ -75,7 +75,10 @@ fn App() -> Element {
         )
         .unwrap();
     let body = schema
-        .text("Type, format, undo — every command goes through Rust.", vec![])
+        .text(
+            "Type, format, undo — every command goes through Rust.",
+            vec![],
+        )
         .unwrap();
     let p = schema
         .node("paragraph", Default::default(), vec![body], vec![])
@@ -117,7 +120,11 @@ fn App() -> Element {
         let mut next = None;
         let handled = {
             let km = keymap.peek();
-            km.handle(&snap, &key, Some(&mut |tx: Transaction| next = Some(snap.apply(tx))))
+            km.handle(
+                &snap,
+                &key,
+                Some(&mut |tx: Transaction| next = Some(snap.apply(tx))),
+            )
         };
         if let Some(n) = next {
             state.set(n);

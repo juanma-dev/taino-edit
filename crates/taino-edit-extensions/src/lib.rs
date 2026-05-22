@@ -30,6 +30,7 @@ pub mod italic;
 pub mod link;
 pub mod lists;
 pub mod paragraph;
+pub mod table;
 pub mod transform_case;
 
 pub use align::{align_center, align_justify, align_left, align_right, Align};
@@ -46,6 +47,10 @@ pub use lists::{
     wrap_in_ordered_list, Lists,
 };
 pub use paragraph::Paragraph;
+pub use table::{
+    add_column_after, add_column_before, add_row_after, add_row_before, delete_column, delete_row,
+    delete_table, insert_table, Table,
+};
 pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 
 /// Node and mark types an extension contributes to the schema.
