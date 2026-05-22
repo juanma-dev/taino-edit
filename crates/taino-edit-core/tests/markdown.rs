@@ -125,6 +125,7 @@ fn schema() -> Schema {
         )
         .mark("strong", MarkSpec::default())
         .mark("em", MarkSpec::default())
+        .mark("code", MarkSpec::default())
         .mark(
             "link",
             MarkSpec {
@@ -413,4 +414,36 @@ fn round_trip_bullet_list() {
     let md = to_markdown(&doc);
     assert!(md.contains("- a"));
     assert!(md.contains("- b"));
+}
+
+#[test]
+fn parse_inline_code_applies_code_mark() {
+    let s = schema();
+    let doc = parse_markdown(&s, "run `cargo test` now").unwrap();
+    // The "cargo test" run carries the code mark.
+    let para = doc.child(0);
+    let coded = para
+        .content()
+        .iter()
+        .find(|n| n.text() == Some("cargo test"))
+        .expect("the code run is present");
+    assert!(
+        coded.marks().iter().any(|m| m.mark_type().name() == "code"),
+        "inline code should carry the code mark"
+    );
+}
+
+#[test]
+fn round_trip_inline_code() {
+    let s = schema();
+    let doc = parse_markdown(&s, "use `x` here").unwrap();
+    let md = to_markdown(&doc);
+    assert!(
+        md.contains("`x`"),
+        "inline code round-trips to backticks: {md}"
+    );
+    // And the literal text inside backticks is not markdown-escaped.
+    let doc2 = parse_markdown(&s, "call `a*b`").unwrap();
+    let md2 = to_markdown(&doc2);
+    assert!(md2.contains("`a*b`"), "code content stays literal: {md2}");
 }

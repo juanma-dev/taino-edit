@@ -8,6 +8,16 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`Code` inline-mark extension** — a `code` mark (`<code>`, toggled with
+  `Mod-e`) for inline code spans, distinct from the `CodeBlock` `<pre>`
+  block. Round-trips to Markdown backticks (`` `like this` ``); the
+  Markdown parser now applies the mark to inline code (previously dropped
+  to plain text), and the serializer emits literal, un-escaped backtick
+  spans (auto-widening the fence when the content contains backticks).
+  Wired into the `basic-leptos` toolbar.
+
 ## [0.3.0] - 2026-05-22
 
 Full tables — schema, span-correct structural editing, cell selection +

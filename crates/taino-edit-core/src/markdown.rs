@@ -219,6 +219,33 @@ fn serialize_inline_node<'a>(node: &'a Node, out: &mut String, active: &mut Vec<
 fn emit_with_marks<'a>(text_node: &'a Node, out: &mut String, active: &mut Vec<&'a Mark>) {
     let marks = text_node.marks();
 
+    // Inline code is a literal span: close any open marks, then emit the
+    // raw (un-escaped) text inside backticks. Markdown can't combine it
+    // with other inline marks, so `code` wins for this run.
+    if marks.iter().any(|m| m.mark_type().name() == "code") {
+        while let Some(closed) = active.pop() {
+            out.push_str(&mark_close(closed));
+        }
+        let text = text_node.text().unwrap_or("");
+        // Use enough backticks to wrap text that itself contains backticks.
+        let max_run = text
+            .split(|c| c != '`')
+            .map(|run| run.len())
+            .max()
+            .unwrap_or(0);
+        let fence = "`".repeat(max_run + 1);
+        out.push_str(&fence);
+        if max_run > 0 {
+            out.push(' ');
+            out.push_str(text);
+            out.push(' ');
+        } else {
+            out.push_str(text);
+        }
+        out.push_str(&fence);
+        return;
+    }
+
     // Close marks that aren't on the new node, from most recent outward.
     while let Some(top) = active.last() {
         if marks.iter().any(|m| m == *top) {
@@ -527,9 +554,15 @@ fn consume_inline(
             }
         }
         Event::Code(t) => {
-            // Inline code: emit as text with no special mark (we don't
-            // ship a `code` mark in v0.1; preserves the text).
-            if let Ok(n) = schema.text(&t, marks.clone()) {
+            // Inline code → text carrying the `code` mark when the schema
+            // declares it (the `Code` extension); otherwise plain text.
+            let mut cm = marks.clone();
+            if let Some(m) = mark_of(schema, "code", Attrs::new()) {
+                if !cm.iter().any(|x| x.mark_type().name() == "code") {
+                    cm.push(m);
+                }
+            }
+            if let Ok(n) = schema.text(&t, cm) {
                 out.push(n);
             }
         }

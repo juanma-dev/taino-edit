@@ -11,8 +11,8 @@ use taino_edit_extensions::{
     build_keymap_with, build_schema_with, delete_column, delete_row, delete_table, insert_image,
     insert_table, lift_list_item, merge_cells, redo_command, remove_link, select_cell_range,
     set_column_width, set_link, split_cell, to_lowercase, to_uppercase, toggle_header_row,
-    undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote, Bold, CodeBlock,
-    Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
+    undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote, Bold, Code,
+    CodeBlock, Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
 };
 use taino_edit_leptos::{
     set_block_type, toggle_mark, wrap_in, Attrs, Command, EditorState, KeyPress, Keymap, NodeSpec,
@@ -46,6 +46,7 @@ fn App() -> impl IntoView {
         &Heading,
         &Bold,
         &Italic,
+        &Code,
         &Link,
         &Image,
         &Align,
@@ -128,8 +129,10 @@ fn App() -> impl IntoView {
     // when called repeatedly without a slot).
     let slot = |cmd: Command| -> StoredValue<Command, LocalStorage> { StoredValue::new_local(cmd) };
 
+    let code_mark = schema.mark_type("code").unwrap().clone();
     let bold_slot = slot(toggle_mark(strong));
     let italic_slot = slot(toggle_mark(em));
+    let code_mark_slot = slot(toggle_mark(code_mark));
     let undo_slot = slot(undo_command());
     let redo_slot = slot(redo_command());
     let para_slot = slot(set_block_type("paragraph", Attrs::new()));
@@ -242,6 +245,7 @@ fn App() -> impl IntoView {
             <div role="toolbar" style="display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; align-items:center;">
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(bold_slot)>"Bold"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(italic_slot)>"Italic"</button>
+                <button on:mousedown=keep_focus on:click=move |_| run_slot(code_mark_slot)>"‹/› code"</button>
                 <button on:mousedown=keep_focus on:click=on_link>"Link…"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(unlink_slot)>"Unlink"</button>
                 <button on:mousedown=keep_focus on:click=on_image>"Image…"</button>
