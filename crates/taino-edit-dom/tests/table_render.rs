@@ -42,7 +42,8 @@ fn cell(s: &Schema, text: &str, attrs: Attrs) -> Node {
 }
 
 fn row(s: &Schema, cells: Vec<Node>) -> Node {
-    s.node("table_row", Default::default(), cells, vec![]).unwrap()
+    s.node("table_row", Default::default(), cells, vec![])
+        .unwrap()
 }
 
 fn table(s: &Schema, rows: Vec<Node>) -> Node {
@@ -50,7 +51,8 @@ fn table(s: &Schema, rows: Vec<Node>) -> Node {
 }
 
 fn doc(s: &Schema, table: Node) -> Node {
-    s.node("doc", Default::default(), vec![table], vec![]).unwrap()
+    s.node("doc", Default::default(), vec![table], vec![])
+        .unwrap()
 }
 
 fn mount(doc: Node, s: Schema) -> EditorView {
@@ -70,8 +72,14 @@ fn renders_table_tr_td_into_dom() {
     let t = table(
         &s,
         vec![
-            row(&s, vec![cell(&s, "a", Attrs::new()), cell(&s, "b", Attrs::new())]),
-            row(&s, vec![cell(&s, "c", Attrs::new()), cell(&s, "d", Attrs::new())]),
+            row(
+                &s,
+                vec![cell(&s, "a", Attrs::new()), cell(&s, "b", Attrs::new())],
+            ),
+            row(
+                &s,
+                vec![cell(&s, "c", Attrs::new()), cell(&s, "d", Attrs::new())],
+            ),
         ],
     );
     let view = mount(doc(&s, t), s);
@@ -97,8 +105,14 @@ fn header_cell_renders_as_th() {
     let view = mount(doc(&s, t), s);
     let html = inner(&view);
     // Cell content is wrapped in a paragraph: <th><p>H</p></th>.
-    assert!(html.contains("<th><p>H</p></th>"), "header cell is <th>: {html}");
-    assert!(html.contains("<td><p>x</p></td>"), "normal cell is <td>: {html}");
+    assert!(
+        html.contains("<th><p>H</p></th>"),
+        "header cell is <th>: {html}"
+    );
+    assert!(
+        html.contains("<td><p>x</p></td>"),
+        "normal cell is <td>: {html}"
+    );
 }
 
 #[wasm_bindgen_test]
@@ -131,10 +145,7 @@ fn colwidth_renders_as_style_width() {
 #[wasm_bindgen_test]
 fn update_patches_table_dom_when_a_row_is_added() {
     let s = schema();
-    let t1 = table(
-        &s,
-        vec![row(&s, vec![cell(&s, "a", Attrs::new())])],
-    );
+    let t1 = table(&s, vec![row(&s, vec![cell(&s, "a", Attrs::new())])]);
     let mut view = mount(doc(&s, t1), s.clone());
     assert_eq!(inner(&view).matches("<tr>").count(), 1);
 
@@ -164,8 +175,14 @@ fn selection_round_trips_into_a_deep_table_cell() {
     let t = table(
         &s,
         vec![
-            row(&s, vec![cell(&s, "a", Attrs::new()), cell(&s, "b", Attrs::new())]),
-            row(&s, vec![cell(&s, "c", Attrs::new()), cell(&s, "d", Attrs::new())]),
+            row(
+                &s,
+                vec![cell(&s, "a", Attrs::new()), cell(&s, "b", Attrs::new())],
+            ),
+            row(
+                &s,
+                vec![cell(&s, "c", Attrs::new()), cell(&s, "d", Attrs::new())],
+            ),
         ],
     );
     let document = web_sys::window().unwrap().document().unwrap();
@@ -176,7 +193,11 @@ fn selection_round_trips_into_a_deep_table_cell() {
     // Position 21 is the caret at the start of "d" in cell (1,1).
     view.set_selection(Selection::caret(21)).unwrap();
     let read = view.read_selection().expect("a selection is present");
-    assert_eq!(read.from(), 21, "caret round-trips into the last cell: {read:?}");
+    assert_eq!(
+        read.from(),
+        21,
+        "caret round-trips into the last cell: {read:?}"
+    );
 
     let _ = document.body().unwrap().remove_child(&root);
 }

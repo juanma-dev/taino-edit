@@ -15,8 +15,38 @@ use crate::decoration::Decoration;
 use crate::desc::ViewDesc;
 use crate::position_map::{doc_pos_to_dom, dom_to_doc_pos};
 
+/// What a [`ViewPlugin`] asks the editor to do in response to a DOM event.
+pub enum ViewAction {
+    /// Replace the selection (e.g. a cell drag selecting a range).
+    Select(Selection),
+    /// Apply a document transform (e.g. a resize writing `colwidth`).
+    Apply(Transform),
+}
+
+/// A DOM-aware editor plugin: it reacts to raw browser events and
+/// contributes [`Decoration`]s, with access to the live [`EditorView`] (its
+/// document, schema and DOM-position primitives). Extensions whose
+/// behaviour is purely structural use the schema/keymap surface in
+/// `taino-edit-extensions`; those needing real pointer interaction
+/// (table cell-drag-select, column resizing, …) implement this instead.
+///
+/// Adapters wire the editor's pointer/keyboard events to
+/// [`EditorView::handle_view_event`] and refresh decorations through
+/// [`EditorView::refresh_view_decorations`]; a plugin therefore stays
+/// framework-agnostic.
+pub trait ViewPlugin {
+    /// Handle a raw DOM event. Return an action to apply, or `None` to pass.
+    fn handle_event(&self, _view: &EditorView, _event: &web_sys::Event) -> Option<ViewAction> {
+        None
+    }
+
+    /// Decorations to render for the current document and selection.
+    fn decorations(&self, _view: &EditorView, _selection: Option<Selection>) -> Vec<Decoration> {
+        Vec::new()
+    }
+}
+
 /// The DOM-bound editor view.
-#[derive(Debug)]
 pub struct EditorView {
     root: Element,
     schema: Schema,
@@ -32,6 +62,19 @@ pub struct EditorView {
     composing: Cell<bool>,
     /// Decorations currently applied on top of the rendered DOM.
     decorations: Vec<Decoration>,
+    /// DOM-aware plugins consulted for event handling and decorations.
+    plugins: Vec<Box<dyn ViewPlugin>>,
+}
+
+impl std::fmt::Debug for EditorView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EditorView")
+            .field("doc", &self.doc)
+            .field("children", &self.children)
+            .field("decorations", &self.decorations)
+            .field("plugins", &self.plugins.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl EditorView {
@@ -67,6 +110,55 @@ impl EditorView {
             children,
             composing: Cell::new(false),
             decorations: Vec::new(),
+            plugins: Vec::new(),
+        }
+    }
+
+    /// Install the DOM-aware [`ViewPlugin`]s (replacing any existing set).
+    pub fn set_view_plugins(&mut self, plugins: Vec<Box<dyn ViewPlugin>>) {
+        self.plugins = plugins;
+    }
+
+    /// Offer a raw DOM event to each view plugin in turn; returns the first
+    /// [`ViewAction`] a plugin produces (the adapter applies it to state).
+    pub fn handle_view_event(&self, event: &web_sys::Event) -> Option<ViewAction> {
+        for p in &self.plugins {
+            if let Some(action) = p.handle_event(self, event) {
+                return Some(action);
+            }
+        }
+        None
+    }
+
+    /// Recompute decorations from every plugin for the given selection and
+    /// apply them. Adapters call this after the state signal changes.
+    pub fn refresh_view_decorations(&mut self, selection: Option<Selection>) {
+        let decos: Vec<Decoration> = self
+            .plugins
+            .iter()
+            .flat_map(|p| p.decorations(self, selection))
+            .collect();
+        self.set_decorations(decos);
+    }
+
+    /// Map a viewport point to the document position just before the
+    /// innermost rendered node element under it (walking up from
+    /// `elementFromPoint` to the nearest node in the view tree). Used by
+    /// pointer-driven plugins (e.g. table cell drag-select). `None` if the
+    /// point isn't over the editor.
+    pub fn pos_at_point(&self, x: f32, y: f32) -> Option<usize> {
+        let document = web_sys::window()?.document()?;
+        let mut el = document.element_from_point(x, y)?;
+        loop {
+            if let Some(pos) = pos_before_element(&self.children, 0, &el) {
+                return Some(pos);
+            }
+            let parent = el.parent_element()?;
+            let same_root = parent.is_same_node(Some(self.root.as_ref()));
+            if !same_root && !self.root.contains(Some(parent.as_ref())) {
+                return None;
+            }
+            el = parent;
         }
     }
 
@@ -456,7 +548,7 @@ fn collect_text_changes(
 fn apply_decoration(children: &[ViewDesc], deco: &Decoration, add: bool) {
     match deco {
         Decoration::Node { pos, class } => {
-            if let Some(ViewDesc::Element { dom, .. }) = find_block_at(children, *pos) {
+            if let Some(dom) = dom_element_at(children, 0, *pos) {
                 let list = dom.class_list();
                 if add {
                     let _ = list.add_1(class);
@@ -468,15 +560,61 @@ fn apply_decoration(children: &[ViewDesc], deco: &Decoration, add: bool) {
     }
 }
 
-fn find_block_at(children: &[ViewDesc], pos: usize) -> Option<&ViewDesc> {
-    let mut cur = 0;
+/// The document position directly before the node whose DOM element is
+/// `target`, searched recursively. `None` if `target` isn't a node element
+/// in the view tree.
+fn pos_before_element(children: &[ViewDesc], base: usize, target: &Element) -> Option<usize> {
+    let mut pos = base;
     for c in children {
-        if pos == cur {
-            return Some(c);
+        match c {
+            ViewDesc::Text { node, .. } => {
+                pos += node.node_size();
+            }
+            ViewDesc::Element {
+                node,
+                dom,
+                children: kids,
+            } => {
+                if dom.is_same_node(Some(target.as_ref())) {
+                    return Some(pos);
+                }
+                if let Some(p) = pos_before_element(kids, pos + 1, target) {
+                    return Some(p);
+                }
+                pos += node.node_size();
+            }
         }
-        cur += c.node().node_size();
-        if pos < cur {
-            return None;
+    }
+    None
+}
+
+/// The DOM element of the node that begins exactly at `target`, searched
+/// recursively through element descriptors. `base` is the document position
+/// just inside the parent of `children`. Returns the element for nested
+/// nodes too (e.g. a table cell), not just top-level blocks.
+fn dom_element_at(children: &[ViewDesc], base: usize, target: usize) -> Option<&Element> {
+    let mut pos = base;
+    for c in children {
+        match c {
+            ViewDesc::Text { node, .. } => {
+                pos += node.node_size();
+            }
+            ViewDesc::Element {
+                node,
+                dom,
+                children: kids,
+            } => {
+                if pos == target {
+                    return Some(dom);
+                }
+                let size = node.node_size();
+                if target > pos && target < pos + size {
+                    if let Some(e) = dom_element_at(kids, pos + 1, target) {
+                        return Some(e);
+                    }
+                }
+                pos += size;
+            }
         }
     }
     None

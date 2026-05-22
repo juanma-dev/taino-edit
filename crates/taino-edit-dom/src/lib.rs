@@ -19,4 +19,4 @@ pub mod view;
 
 pub use decoration::Decoration;
 pub use desc::ViewDesc;
-pub use view::EditorView;
+pub use view::{EditorView, ViewAction, ViewPlugin};
