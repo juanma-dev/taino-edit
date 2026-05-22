@@ -1,16 +1,20 @@
-//! Tables — `table` / `table_row` / `table_cell` nodes plus the command
-//! vocabulary a table-aware editor needs.
+//! Tables — `table` / `table_row` / `table_cell` nodes plus the full
+//! command vocabulary a table-aware editor needs.
 //!
-//! Cells carry `colspan` / `rowspan` / `header` attrs and round-trip as
-//! `<table><tr><td>` / `<th>` (with the span attributes). Structural
-//! commands (`insert_table`, add/delete rows and columns, `delete_table`,
-//! the `toggle_header_*` family) operate on the cell containing the caret
-//! and rebuild the enclosing `table` node wholesale — tables are small, so
-//! the O(table size) rebuild is cheap and keeps the position arithmetic
-//! obviously correct.
+//! Cells carry `colspan` / `rowspan` / `header` / `colwidth` attrs and
+//! round-trip as `<table><tr><td>` / `<th>`. Every structural command is
+//! **span-aware**: they decompose the table into a list of [`Placement`]s
+//! (cells with logical-grid coordinates + spans), transform that list, and
+//! re-render through [`render_placements`], which compacts rows/columns
+//! that become fully span-covered and recomputes every span against the
+//! compacted grid. The result is always a well-formed, rectangular table —
+//! merging, splitting, adding and deleting rows/columns can never leave an
+//! orphan `rowspan`/`colspan` or an empty `<tr>`.
 //!
-//! Cell-range selection (`CellSelection`), merge/split and column resizing
-//! build on this foundation in later phases.
+//! Commands: `insert_table`, add/delete rows and columns, `delete_table`,
+//! `toggle_header_*`, `go_to_next_cell`/`go_to_prev_cell` (Tab/Shift-Tab),
+//! `select_cell_range` + `merge_cells` + `split_cell`, and
+//! `set_column_width`.
 
 use std::collections::HashMap;
 
@@ -313,6 +317,135 @@ impl TableMap {
     }
 }
 
+/// A cell placed on the logical grid: its top-left logical coordinate, its
+/// span, and the cell node. Structural table operations are expressed as
+/// transformations of a `Vec<Placement>`, then re-rendered to rows. This
+/// keeps colspan/rowspan correct under every edit.
+#[derive(Clone)]
+struct Placement {
+    row: usize,
+    col: usize,
+    colspan: usize,
+    rowspan: usize,
+    cell: Node,
+}
+
+/// Decompose a table into logical-grid placements (one per origin cell).
+fn placements_of(table: &Node) -> Vec<Placement> {
+    let map = TableMap::of(table);
+    let mut out = Vec::new();
+    let mut seen: Vec<(usize, usize)> = Vec::new();
+    for r in 0..map.height {
+        for c in 0..map.width {
+            if let Some(doc) = map.at(r, c) {
+                if seen.contains(&doc) {
+                    continue;
+                }
+                seen.push(doc);
+                let cell = table.child(doc.0).child(doc.1).clone();
+                out.push(Placement {
+                    row: r,
+                    col: c,
+                    colspan: colspan_of(&cell),
+                    rowspan: rowspan_of(&cell),
+                    cell,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Re-render placements into a `table` node. Rows/columns that became
+/// entirely covered by spans (no cell originates in them) are dropped and
+/// the crossing spans are reduced accordingly — so the result is always a
+/// well-formed, rectangular table with no orphan colspan/rowspan. Returns
+/// `None` if there are no cells left (caller deletes the table).
+fn render_placements(
+    schema: &Schema,
+    placements: &[Placement],
+    table_attrs: Attrs,
+) -> Option<Node> {
+    if placements.is_empty() {
+        return None;
+    }
+    let raw_h = placements
+        .iter()
+        .map(|p| p.row + p.rowspan)
+        .max()
+        .unwrap_or(0);
+    let raw_w = placements
+        .iter()
+        .map(|p| p.col + p.colspan)
+        .max()
+        .unwrap_or(0);
+
+    // "Real" rows/cols are those some cell originates in; any other
+    // row/col is pure span-coverage and is dropped.
+    let real_rows: Vec<usize> = (0..raw_h)
+        .filter(|&r| placements.iter().any(|p| p.row == r))
+        .collect();
+    let real_cols: Vec<usize> = (0..raw_w)
+        .filter(|&c| placements.iter().any(|p| p.col == c))
+        .collect();
+    if real_rows.is_empty() || real_cols.is_empty() {
+        return None;
+    }
+    let row_compact = |raw: usize| real_rows.iter().position(|&x| x == raw);
+    let col_compact = |raw: usize| real_cols.iter().position(|&x| x == raw);
+
+    // Bucket placements by compacted row.
+    let mut rows: Vec<Vec<(usize, Node)>> = vec![Vec::new(); real_rows.len()];
+    for p in placements {
+        let Some(nr) = row_compact(p.row) else {
+            continue;
+        };
+        let Some(nc) = col_compact(p.col) else {
+            continue;
+        };
+        // Recompute spans against the compacted grid.
+        let new_rowspan = real_rows
+            .iter()
+            .filter(|&&r| r >= p.row && r < p.row + p.rowspan)
+            .count()
+            .max(1);
+        let new_colspan = real_cols
+            .iter()
+            .filter(|&&c| c >= p.col && c < p.col + p.colspan)
+            .count()
+            .max(1);
+        let mut attrs = p.cell.attrs().clone();
+        attrs.insert("colspan".into(), AttrValue::from(new_colspan as u64));
+        attrs.insert("rowspan".into(), AttrValue::from(new_rowspan as u64));
+        let cell = schema
+            .node(
+                "table_cell",
+                attrs,
+                p.cell.content().children().to_vec(),
+                p.cell.marks().to_vec(),
+            )
+            .ok()?;
+        rows[nr].push((nc, cell));
+    }
+
+    let mut row_nodes = Vec::with_capacity(rows.len());
+    for mut cells in rows {
+        if cells.is_empty() {
+            // Should not happen (real rows have an origin), but never emit
+            // an empty <tr>.
+            return None;
+        }
+        cells.sort_by_key(|(c, _)| *c);
+        let ordered: Vec<Node> = cells.into_iter().map(|(_, n)| n).collect();
+        row_nodes.push(
+            schema
+                .node("table_row", Default::default(), ordered, vec![])
+                .ok()?,
+        );
+    }
+    schema.node("table", table_attrs, row_nodes, vec![]).ok()
+}
+
 /// Absolute position directly before cell at document index
 /// `(row_index, cell_index)` of `table` starting at `tstart`.
 fn cell_before_abs(table: &Node, tstart: usize, row: usize, cell_idx: usize) -> usize {
@@ -398,6 +531,39 @@ fn replace_table(
     }
 }
 
+/// Replace the table with `new_table` and place the caret in its logical
+/// `(row, col)` cell (clamped to the new grid).
+fn replace_table_logical(
+    state: &taino_edit_core::EditorState,
+    rp: &ResolvedPos,
+    table_depth: usize,
+    new_table: Node,
+    logical_target: (usize, usize),
+    dispatch: Option<&mut taino_edit_core::Dispatch<'_>>,
+) {
+    let start = rp.before(table_depth);
+    let end = rp.after(table_depth);
+    if let Some(d) = dispatch {
+        let mut tx = state.tr();
+        let map = TableMap::of(&new_table);
+        let lr = logical_target.0.min(map.height.saturating_sub(1));
+        let lc = logical_target.1.min(map.width.saturating_sub(1));
+        let caret = map
+            .at(lr, lc)
+            .map(|(ri, ci)| cell_caret_pos(&new_table, start, ri, ci))
+            .unwrap_or(start + 4);
+        let slice = Slice::new(Fragment::from_node(new_table), 0, 0);
+        if tx
+            .transform()
+            .replace(start, end, slice, state.schema())
+            .is_ok()
+        {
+            tx.set_selection(Selection::caret(caret));
+            d(tx);
+        }
+    }
+}
+
 // ---- commands ------------------------------------------------------------
 
 /// Insert an empty `rows`×`cols` table as a new block after the block
@@ -434,40 +600,56 @@ pub fn insert_table(rows: usize, cols: usize) -> Command {
     })
 }
 
+/// The caret's logical position within its table: `(table_depth,
+/// logical_row, logical_col)`.
+fn caret_logical(rp: &ResolvedPos) -> Option<(usize, usize, usize)> {
+    let (td, row_idx, cell_idx) = find_table(rp)?;
+    let map = TableMap::of(rp.node(td));
+    let (_, lcol) = map.logical_of((row_idx, cell_idx))?;
+    Some((td, row_idx, lcol))
+}
+
 fn add_column(after: bool) -> Command {
     Box::new(move |state, dispatch| {
         let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
             return false;
         };
-        let Some((td, row, col)) = find_table(&rp) else {
+        let Some((td, lrow, lcol)) = caret_logical(&rp) else {
             return false;
         };
         let table = rp.node(td);
-        let insert_at = if after { col + 1 } else { col };
-        let mut new_rows = Vec::with_capacity(table.child_count());
-        for row in table.content().iter() {
-            let mut cells = row.content().children().to_vec();
-            let at = insert_at.min(cells.len());
-            let Some(cell) = empty_cell(state.schema()) else {
-                return false;
-            };
-            cells.insert(at, cell);
-            let Ok(new_row) = state
-                .schema()
-                .node("table_row", row.attrs().clone(), cells, vec![])
-            else {
-                return false;
-            };
-            new_rows.push(new_row);
+        let map = TableMap::of(table);
+        let at = if after { lcol + 1 } else { lcol };
+        let mut placements = placements_of(table);
+        // Shift / grow existing cells around the insertion column.
+        for p in placements.iter_mut() {
+            if p.col >= at {
+                p.col += 1;
+            } else if p.col + p.colspan > at {
+                p.colspan += 1; // straddles the boundary → widen
+            }
         }
-        let Ok(new_table) = state
-            .schema()
-            .node("table", table.attrs().clone(), new_rows, vec![])
+        // Add fresh 1×1 cells in rows where the new column is uncovered.
+        for r in 0..map.height {
+            if !cell_covered(&placements, r, at) {
+                let Some(cell) = empty_cell(state.schema()) else {
+                    return false;
+                };
+                placements.push(Placement {
+                    row: r,
+                    col: at,
+                    colspan: 1,
+                    rowspan: 1,
+                    cell,
+                });
+            }
+        }
+        let Some(new_table) = render_placements(state.schema(), &placements, table.attrs().clone())
         else {
             return false;
         };
-        let target = if after { (row, col) } else { (row, col + 1) };
-        replace_table(state, &rp, td, Some(new_table), Some(target), dispatch);
+        let target = (lrow, if after { lcol } else { lcol + 1 });
+        replace_table_logical(state, &rp, td, new_table, target, dispatch);
         true
     })
 }
@@ -488,39 +670,43 @@ pub fn delete_column() -> Command {
         let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
             return false;
         };
-        let Some((td, row, col)) = find_table(&rp) else {
+        let Some((td, lrow, lcol)) = caret_logical(&rp) else {
             return false;
         };
         let table = rp.node(td);
-        let n_cols = table.child(0).child_count();
-        if n_cols <= 1 {
-            replace_table(state, &rp, td, None, None, dispatch);
-            return true;
-        }
-        let mut new_rows = Vec::with_capacity(table.child_count());
-        for row in table.content().iter() {
-            let mut cells = row.content().children().to_vec();
-            if col < cells.len() {
-                cells.remove(col);
+        let mut placements: Vec<Placement> = Vec::new();
+        for p in placements_of(table) {
+            if p.col <= lcol && lcol < p.col + p.colspan {
+                // Covers the doomed column.
+                if p.colspan > 1 {
+                    let mut q = p.clone();
+                    q.colspan -= 1; // shrink; origin col stays (boundary)
+                    placements.push(q);
+                }
+                // colspan == 1 → drop the cell entirely
+            } else {
+                let mut q = p.clone();
+                if q.col > lcol {
+                    q.col -= 1;
+                }
+                placements.push(q);
             }
-            let Ok(new_row) = state
-                .schema()
-                .node("table_row", row.attrs().clone(), cells, vec![])
-            else {
-                return false;
-            };
-            new_rows.push(new_row);
         }
-        let Ok(new_table) = state
-            .schema()
-            .node("table", table.attrs().clone(), new_rows, vec![])
-        else {
-            return false;
-        };
-        // After removing column `col`, clamp the caret to the new width.
-        replace_table(state, &rp, td, Some(new_table), Some((row, col)), dispatch);
+        match render_placements(state.schema(), &placements, table.attrs().clone()) {
+            Some(new_table) => {
+                replace_table_logical(state, &rp, td, new_table, (lrow, lcol), dispatch)
+            }
+            None => replace_table(state, &rp, td, None, None, dispatch),
+        }
         true
     })
+}
+
+/// Whether logical cell `(r, c)` is covered by any placement.
+fn cell_covered(placements: &[Placement], r: usize, c: usize) -> bool {
+    placements
+        .iter()
+        .any(|p| r >= p.row && r < p.row + p.rowspan && c >= p.col && c < p.col + p.colspan)
 }
 
 fn add_row(after: bool) -> Command {
@@ -528,35 +714,42 @@ fn add_row(after: bool) -> Command {
         let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
             return false;
         };
-        let Some((td, row, col)) = find_table(&rp) else {
+        let Some((td, lrow, lcol)) = caret_logical(&rp) else {
             return false;
         };
         let table = rp.node(td);
-        let n_cols = table.child(0).child_count();
-        let mut cells = Vec::with_capacity(n_cols);
-        for _ in 0..n_cols {
-            let Some(c) = empty_cell(state.schema()) else {
-                return false;
-            };
-            cells.push(c);
+        let map = TableMap::of(table);
+        let at = if after { lrow + 1 } else { lrow };
+        let mut placements = placements_of(table);
+        // Shift / grow existing cells around the insertion row.
+        for p in placements.iter_mut() {
+            if p.row >= at {
+                p.row += 1;
+            } else if p.row + p.rowspan > at {
+                p.rowspan += 1; // a rowspan straddles the boundary → grow it
+            }
         }
-        let Ok(new_row) = state
-            .schema()
-            .node("table_row", Default::default(), cells, vec![])
+        // Add fresh 1×1 cells in columns where the new row is uncovered.
+        for c in 0..map.width {
+            if !cell_covered(&placements, at, c) {
+                let Some(cell) = empty_cell(state.schema()) else {
+                    return false;
+                };
+                placements.push(Placement {
+                    row: at,
+                    col: c,
+                    colspan: 1,
+                    rowspan: 1,
+                    cell,
+                });
+            }
+        }
+        let Some(new_table) = render_placements(state.schema(), &placements, table.attrs().clone())
         else {
             return false;
         };
-        let mut rows = table.content().children().to_vec();
-        let at = if after { row + 1 } else { row };
-        let at = at.min(rows.len());
-        rows.insert(at, new_row);
-        let Ok(new_table) = state
-            .schema()
-            .node("table", table.attrs().clone(), rows, vec![])
-        else {
-            return false;
-        };
-        replace_table(state, &rp, td, Some(new_table), Some((at, col)), dispatch);
+        let target = (at, lcol);
+        replace_table_logical(state, &rp, td, new_table, target, dispatch);
         true
     })
 }
@@ -576,25 +769,34 @@ pub fn delete_row() -> Command {
         let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
             return false;
         };
-        let Some((td, row, col)) = find_table(&rp) else {
+        let Some((td, lrow, lcol)) = caret_logical(&rp) else {
             return false;
         };
         let table = rp.node(td);
-        if table.child_count() <= 1 {
-            replace_table(state, &rp, td, None, None, dispatch);
-            return true;
+        let mut placements: Vec<Placement> = Vec::new();
+        for p in placements_of(table) {
+            if p.row <= lrow && lrow < p.row + p.rowspan {
+                // Covers the doomed row.
+                if p.rowspan > 1 {
+                    let mut q = p.clone();
+                    q.rowspan -= 1; // shrink; origin row stays (boundary)
+                    placements.push(q);
+                }
+                // rowspan == 1 → drop the cell entirely
+            } else {
+                let mut q = p.clone();
+                if q.row > lrow {
+                    q.row -= 1;
+                }
+                placements.push(q);
+            }
         }
-        let mut rows = table.content().children().to_vec();
-        if row < rows.len() {
-            rows.remove(row);
+        match render_placements(state.schema(), &placements, table.attrs().clone()) {
+            Some(new_table) => {
+                replace_table_logical(state, &rp, td, new_table, (lrow, lcol), dispatch)
+            }
+            None => replace_table(state, &rp, td, None, None, dispatch),
         }
-        let Ok(new_table) = state
-            .schema()
-            .node("table", table.attrs().clone(), rows, vec![])
-        else {
-            return false;
-        };
-        replace_table(state, &rp, td, Some(new_table), Some((row, col)), dispatch);
         true
     })
 }
@@ -764,30 +966,28 @@ fn go_to_cell(forward: bool) -> Command {
                 dispatch_caret_to(state, table, tstart, row + 1, 0, dispatch);
                 return true;
             }
-            // Past the last cell: append a fresh row and land in it.
-            let n_cols = cur_cols;
-            let mut cells = Vec::with_capacity(n_cols);
-            for _ in 0..n_cols {
-                let Some(c) = empty_cell(state.schema()) else {
+            // Past the last cell: append a fresh row (logical-width many
+            // empty cells, span-aware) and land in its first cell.
+            let logical_w = TableMap::of(table).width;
+            let mut placements = placements_of(table);
+            for c in 0..logical_w {
+                let Some(cell) = empty_cell(state.schema()) else {
                     return false;
                 };
-                cells.push(c);
+                placements.push(Placement {
+                    row: n_rows,
+                    col: c,
+                    colspan: 1,
+                    rowspan: 1,
+                    cell,
+                });
             }
-            let Ok(new_row) = state
-                .schema()
-                .node("table_row", Default::default(), cells, vec![])
+            let Some(new_table) =
+                render_placements(state.schema(), &placements, table.attrs().clone())
             else {
                 return false;
             };
-            let mut rows = table.content().children().to_vec();
-            rows.push(new_row);
-            let Ok(new_table) = state
-                .schema()
-                .node("table", table.attrs().clone(), rows, vec![])
-            else {
-                return false;
-            };
-            replace_table(state, &rp, td, Some(new_table), Some((n_rows, 0)), dispatch);
+            replace_table_logical(state, &rp, td, new_table, (n_rows, 0), dispatch);
             true
         } else {
             if col > 0 {
@@ -855,9 +1055,47 @@ pub fn select_cell_range(anchor: (usize, usize), head: (usize, usize)) -> Comman
     })
 }
 
+/// Resolve an absolute cell-before position into its logical `(row, col)`.
+fn logical_at_pos(
+    table: &Node,
+    tstart: usize,
+    map: &TableMap,
+    pos: usize,
+) -> Option<(usize, usize)> {
+    for (ri, row) in table.content().iter().enumerate() {
+        for (ci, _) in row.content().iter().enumerate() {
+            if cell_before_abs(table, tstart, ri, ci) == pos {
+                return map.logical_of((ri, ci));
+            }
+        }
+    }
+    None
+}
+
+/// Concatenated, de-duplicated block content for a merge: drop empty
+/// paragraphs, but keep at least one block so the cell stays valid.
+fn merged_content(schema: &Schema, blocks: Vec<Node>) -> Vec<Node> {
+    let non_empty: Vec<Node> = blocks
+        .into_iter()
+        .filter(|b| b.content().size() > 0)
+        .collect();
+    if non_empty.is_empty() {
+        schema
+            .node("paragraph", Default::default(), vec![], vec![])
+            .ok()
+            .into_iter()
+            .collect()
+    } else {
+        non_empty
+    }
+}
+
 /// Merge the cells covered by the current [`Selection::Cell`] into one,
 /// with the matching colspan/rowspan and the concatenated content of all
-/// merged cells. A no-op unless a multi-cell range is selected.
+/// merged cells. The selection rectangle is expanded to whole spans so the
+/// merge always operates on a clean rectangle; the render then compacts any
+/// rows/columns that become fully covered, so no orphan spans remain. A
+/// no-op unless the rectangle covers more than one cell.
 pub fn merge_cells() -> Command {
     Box::new(move |state, dispatch| {
         let Selection::Cell { anchor, head } = state.selection() else {
@@ -873,99 +1111,75 @@ pub fn merge_cells() -> Command {
         let tstart = rp.before(td);
         let map = TableMap::of(table);
 
-        // Logical coordinates of the anchor & head cells.
-        let cell_at_pos = |p: usize| -> Option<(usize, usize)> {
-            // Resolve which document cell starts at abs position p, then map.
-            for (ri, row) in table.content().iter().enumerate() {
-                for (ci, _) in row.content().iter().enumerate() {
-                    if cell_before_abs(table, tstart, ri, ci) == p {
-                        return map.logical_of((ri, ci));
-                    }
-                }
-            }
-            None
-        };
-        let (Some((ar, ac)), Some((hr, hc))) = (cell_at_pos(anchor), cell_at_pos(head)) else {
+        let (Some((ar, ac)), Some((hr, hc))) = (
+            logical_at_pos(table, tstart, &map, anchor),
+            logical_at_pos(table, tstart, &map, head),
+        ) else {
             return false;
         };
-        let (r0, r1) = (ar.min(hr), ar.max(hr));
-        let (c0, c1) = (ac.min(hc), ac.max(hc));
+        let (mut r0, mut r1) = (ar.min(hr), ar.max(hr));
+        let (mut c0, mut c1) = (ac.min(hc), ac.max(hc));
+
+        let placements = placements_of(table);
+        // Expand the rectangle until it covers whole spans (no cell pokes out).
+        loop {
+            let before = (r0, r1, c0, c1);
+            for p in &placements {
+                let pr1 = p.row + p.rowspan - 1;
+                let pc1 = p.col + p.colspan - 1;
+                let overlaps = p.row <= r1 && pr1 >= r0 && p.col <= c1 && pc1 >= c0;
+                if overlaps {
+                    r0 = r0.min(p.row);
+                    r1 = r1.max(pr1);
+                    c0 = c0.min(p.col);
+                    c1 = c1.max(pc1);
+                }
+            }
+            if (r0, r1, c0, c1) == before {
+                break;
+            }
+        }
         if r0 == r1 && c0 == c1 {
-            return false; // single cell — nothing to merge
+            return false; // a single (possibly spanned) cell — nothing to merge
         }
 
-        // Document cells inside the rectangle, in reading order.
-        let mut covered: Vec<(usize, usize)> = Vec::new();
-        for r in r0..=r1 {
-            for c in c0..=c1 {
-                if let Some(dc) = map.at(r, c) {
-                    if !covered.contains(&dc) {
-                        covered.push(dc);
-                    }
-                }
-            }
-        }
-        let top_left = match map.at(r0, c0) {
-            Some(tl) => tl,
-            None => return false,
-        };
-
-        // Merge all covered cells' block content into the top-left cell and
-        // give it the new spans.
         let schema = state.schema();
+        let mut sorted = placements.clone();
+        sorted.sort_by_key(|p| (p.row, p.col));
         let mut merged_blocks: Vec<Node> = Vec::new();
-        for (ri, ci) in &covered {
-            merged_blocks.extend(table.child(*ri).child(*ci).content().children().to_vec());
-        }
-        let mut attrs = table.child(top_left.0).child(top_left.1).attrs().clone();
-        attrs.insert("colspan".into(), AttrValue::from((c1 - c0 + 1) as u64));
-        attrs.insert("rowspan".into(), AttrValue::from((r1 - r0 + 1) as u64));
-        let Ok(merged_cell) = schema.node("table_cell", attrs, merged_blocks, vec![]) else {
-            return false;
-        };
-
-        // Rebuild rows, dropping covered cells except the top-left (replaced
-        // by the merged cell).
-        let mut new_rows = Vec::with_capacity(table.child_count());
-        for (ri, row) in table.content().iter().enumerate() {
-            let mut cells = Vec::new();
-            for (ci, cell) in row.content().iter().enumerate() {
-                if (ri, ci) == top_left {
-                    cells.push(merged_cell.clone());
-                } else if covered.contains(&(ri, ci)) {
-                    // dropped
-                } else {
-                    cells.push(cell.clone());
+        let mut top_left_attrs = Attrs::new();
+        let mut others: Vec<Placement> = Vec::new();
+        for p in sorted {
+            let inside = p.row >= r0
+                && p.row + p.rowspan - 1 <= r1
+                && p.col >= c0
+                && p.col + p.colspan - 1 <= c1;
+            if inside {
+                merged_blocks.extend(p.cell.content().children().to_vec());
+                if (p.row, p.col) == (r0, c0) {
+                    top_left_attrs = p.cell.attrs().clone();
                 }
+            } else {
+                others.push(p);
             }
-            // A row may legitimately become empty only if the whole row was
-            // inside the rectangle and not the top-left row; skip such rows.
-            if cells.is_empty() {
-                continue;
-            }
-            let Ok(new_row) = schema.node("table_row", row.attrs().clone(), cells, vec![]) else {
-                return false;
-            };
-            new_rows.push(new_row);
         }
-        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+        top_left_attrs.insert("colspan".into(), AttrValue::from((c1 - c0 + 1) as u64));
+        top_left_attrs.insert("rowspan".into(), AttrValue::from((r1 - r0 + 1) as u64));
+        let blocks = merged_content(schema, merged_blocks);
+        let Ok(merged_cell) = schema.node("table_cell", top_left_attrs, blocks, vec![]) else {
             return false;
         };
-        if let Some(d) = dispatch {
-            let mut tx = state.tr();
-            let start = rp.before(td);
-            let end = rp.after(td);
-            let slice = Slice::new(Fragment::from_node(new_table), 0, 0);
-            if tx
-                .transform()
-                .replace(start, end, slice, state.schema())
-                .is_ok()
-            {
-                // Caret into the merged (top-left) cell.
-                tx.set_selection(Selection::caret(start + 4));
-                d(tx);
-            }
-        }
+        others.push(Placement {
+            row: r0,
+            col: c0,
+            colspan: c1 - c0 + 1,
+            rowspan: r1 - r0 + 1,
+            cell: merged_cell,
+        });
+        let Some(new_table) = render_placements(schema, &others, table.attrs().clone()) else {
+            return false;
+        };
+        replace_table_logical(state, &rp, td, new_table, (r0, c0), dispatch);
         true
     })
 }
@@ -978,104 +1192,63 @@ pub fn split_cell() -> Command {
         let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
             return false;
         };
-        let Some((td, row, col)) = find_table(&rp) else {
+        let Some((td, lrow, lcol)) = caret_logical(&rp) else {
             return false;
         };
         let table = rp.node(td);
-        let cell = table.child(row).child(col);
-        let cs = colspan_of(cell);
-        let rs = rowspan_of(cell);
-        if cs == 1 && rs == 1 {
-            return false;
-        }
         let schema = state.schema();
-        let map = TableMap::of(table);
-        let Some((lr, lc)) = map.logical_of((row, col)) else {
+        let mut placements = placements_of(table);
+        let Some(idx) = placements
+            .iter()
+            .position(|p| p.row == lrow && p.col == lcol)
+        else {
             return false;
         };
-
-        // The unspanned (1×1) version of the original cell, keeping content.
-        let mut base_attrs = cell.attrs().clone();
-        base_attrs.insert("colspan".into(), AttrValue::from(1u64));
-        base_attrs.insert("rowspan".into(), AttrValue::from(1u64));
+        let p = placements[idx].clone();
+        if p.colspan == 1 && p.rowspan == 1 {
+            return false;
+        }
+        // Keep the origin as a 1×1 cell with the content; fill the rest of
+        // the old span with fresh empty 1×1 cells.
+        let mut kept_attrs = p.cell.attrs().clone();
+        kept_attrs.insert("colspan".into(), AttrValue::from(1u64));
+        kept_attrs.insert("rowspan".into(), AttrValue::from(1u64));
         let Ok(kept) = schema.node(
             "table_cell",
-            base_attrs,
-            cell.content().children().to_vec(),
-            vec![],
+            kept_attrs,
+            p.cell.content().children().to_vec(),
+            p.cell.marks().to_vec(),
         ) else {
             return false;
         };
-
-        // Rebuild every row, inserting fresh cells for the freed logical
-        // columns. We work per logical row in the cell's vertical span.
-        let mut new_rows = Vec::with_capacity(table.child_count());
-        for (ri, r) in table.content().iter().enumerate() {
-            // Cells of this row that are NOT the spanned cell stay; we then
-            // splice the split cells into the right logical span.
-            if !(lr..lr + rs).contains(&ri) {
-                new_rows.push(r.clone());
-                continue;
-            }
-            // Rebuild this row: copy existing cells, replacing the spanned
-            // one (only present in its top row) and adding 1×1 cells across
-            // its logical columns.
-            let mut cells: Vec<Node> = Vec::new();
-            for (ci, c) in r.content().iter().enumerate() {
-                if ri == row && ci == col {
-                    // Top-left: emit the kept cell plus fillers for the rest
-                    // of this logical row's span.
-                    cells.push(kept.clone());
-                    for _ in 1..cs {
-                        let Some(e) = empty_cell(schema) else {
-                            return false;
-                        };
-                        cells.push(e);
-                    }
-                } else {
-                    cells.push(c.clone());
+        placements[idx] = Placement {
+            row: p.row,
+            col: p.col,
+            colspan: 1,
+            rowspan: 1,
+            cell: kept,
+        };
+        for dr in 0..p.rowspan {
+            for dc in 0..p.colspan {
+                if dr == 0 && dc == 0 {
+                    continue;
                 }
+                let Some(cell) = empty_cell(schema) else {
+                    return false;
+                };
+                placements.push(Placement {
+                    row: p.row + dr,
+                    col: p.col + dc,
+                    colspan: 1,
+                    rowspan: 1,
+                    cell,
+                });
             }
-            // For rows below the top (rowspan), the spanned cell wasn't a
-            // member, so add a full run of fillers at the freed columns.
-            if ri != row {
-                let mut fillers = Vec::new();
-                for _ in 0..cs {
-                    let Some(e) = empty_cell(schema) else {
-                        return false;
-                    };
-                    fillers.push(e);
-                }
-                // Insert fillers at logical column lc (best-effort: append at
-                // the position matching lc among existing cells).
-                let insert_at = lc.min(cells.len());
-                for (k, f) in fillers.into_iter().enumerate() {
-                    cells.insert(insert_at + k, f);
-                }
-            }
-            let Ok(new_row) = schema.node("table_row", r.attrs().clone(), cells, vec![]) else {
-                return false;
-            };
-            new_rows.push(new_row);
         }
-        let Ok(new_table) = schema.node("table", table.attrs().clone(), new_rows, vec![]) else {
+        let Some(new_table) = render_placements(schema, &placements, table.attrs().clone()) else {
             return false;
         };
-        if let Some(d) = dispatch {
-            let mut tx = state.tr();
-            let start = rp.before(td);
-            let end = rp.after(td);
-            let caret = cell_caret_pos(&new_table, start, lr, lc);
-            let slice = Slice::new(Fragment::from_node(new_table), 0, 0);
-            if tx
-                .transform()
-                .replace(start, end, slice, state.schema())
-                .is_ok()
-            {
-                tx.set_selection(Selection::caret(caret));
-                d(tx);
-            }
-        }
+        replace_table_logical(state, &rp, td, new_table, (lrow, lcol), dispatch);
         true
     })
 }

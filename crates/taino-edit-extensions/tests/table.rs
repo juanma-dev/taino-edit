@@ -422,3 +422,129 @@ fn table_round_trips_through_html() {
         "round-trip changed dims: {reparsed_html}"
     );
 }
+
+// ---- well-formedness invariant -------------------------------------------
+
+/// Assert the table in `state` is well-formed: it re-parses, every `<tr>`
+/// has at least one cell, and no `rowspan`/`colspan` points past the grid.
+fn assert_table_well_formed(state: &EditorState) {
+    let html = state.doc().to_html();
+    // Re-parsing and re-serializing must be stable (a malformed tree would
+    // drift or fail to parse).
+    let parsed = state
+        .schema()
+        .parse_html(&html)
+        .expect("table HTML must re-parse");
+    let reparsed = parsed.to_html();
+    assert_eq!(
+        html, reparsed,
+        "table HTML is not round-trip stable: {html}"
+    );
+
+    // No empty rows.
+    for row in html.split("<tr>").skip(1) {
+        let body = row.split("</tr>").next().unwrap_or("");
+        assert!(
+            body.contains("<td") || body.contains("<th"),
+            "found an empty <tr>: {html}"
+        );
+    }
+
+    // rowspan never exceeds the number of remaining rows.
+    let n_rows = html.matches("<tr>").count();
+    for chunk in html.split("rowspan=\"").skip(1) {
+        let n: usize = chunk
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse()
+            .unwrap_or(1);
+        assert!(
+            n <= n_rows,
+            "rowspan={n} exceeds the {n_rows} rows present: {html}"
+        );
+    }
+}
+
+#[test]
+fn merge_all_cells_collapses_without_orphan_spans() {
+    // The bug from the pre-refactor audit: merging the whole 2×2 used to
+    // emit `rowspan="2"` in a single-row table. It must now collapse to a
+    // clean 1×1 cell.
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (1, 1)));
+    let s = run(s, &merge_cells());
+    assert_table_well_formed(&s);
+    let html = s.doc().to_html();
+    assert!(
+        !html.contains("rowspan") && !html.contains("colspan"),
+        "merging every cell should collapse to a 1×1 with no spans: {html}"
+    );
+    assert_eq!(dims(&html), (1, 1), "expected a 1×1 table: {html}");
+}
+
+#[test]
+fn merge_then_add_column_stays_well_formed() {
+    // merge row 0 → colspan=2; then add a column. The pre-refactor naive
+    // index would misalign the grid.
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (0, 1)));
+    let s = run(s, &merge_cells());
+    assert_table_well_formed(&s);
+    let s = run(s, &add_column_after());
+    assert_table_well_formed(&s);
+}
+
+#[test]
+fn add_column_inside_a_span_widens_it() {
+    // A row-0 cell spanning columns 0–1; inserting a column "after" column 0
+    // lands inside the span, so the span widens to 3 rather than splitting.
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (0, 1)));
+    let s = run(s, &merge_cells()); // row0 = colspan2
+                                    // Caret is in the merged cell (logical col 0). add_column_after inserts
+                                    // at logical col 1, inside the colspan-2 cell → it should widen to 3.
+    let s = run(s, &add_column_after());
+    assert_table_well_formed(&s);
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("colspan=\"3\""),
+        "inserting inside a span should widen it to 3: {html}"
+    );
+}
+
+#[test]
+fn delete_column_through_a_span_shrinks_it() {
+    let s = run(doc_with_paragraph(), &insert_table(2, 3));
+    let s = run(s, &select_cell_range((0, 0), (0, 1)));
+    let s = run(s, &merge_cells()); // row0 col0 = colspan2, plus col2 cell
+    assert_table_well_formed(&s);
+    // Delete column 0 — it's inside the colspan-2 cell, which should shrink
+    // to colspan 1 (not disappear).
+    let s = run(s, &delete_column());
+    assert_table_well_formed(&s);
+}
+
+#[test]
+fn delete_row_through_a_rowspan_shrinks_it() {
+    let s = run(doc_with_paragraph(), &insert_table(3, 2));
+    let s = run(s, &select_cell_range((0, 0), (1, 0)));
+    let s = run(s, &merge_cells()); // col0 rows0-1 = rowspan2
+    assert_table_well_formed(&s);
+    let s = run(s, &delete_row()); // caret row 0 — inside the rowspan
+    assert_table_well_formed(&s);
+}
+
+#[test]
+fn merge_empty_cells_keeps_one_paragraph() {
+    // Merging empty cells must not pile up empty <p></p> blocks.
+    let s = run(doc_with_paragraph(), &insert_table(2, 2));
+    let s = run(s, &select_cell_range((0, 0), (1, 1)));
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert_eq!(
+        html.matches("<p></p>").count(),
+        1,
+        "merged empty cells should keep exactly one empty paragraph: {html}"
+    );
+}
