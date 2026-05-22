@@ -2476,6 +2476,7 @@ dependencies = [
  "js-sys",
  "serde_json",
  "taino-edit-core",
+ "taino-edit-extensions",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
