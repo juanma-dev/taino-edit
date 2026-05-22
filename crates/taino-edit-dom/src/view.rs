@@ -166,6 +166,19 @@ impl EditorView {
                 let len = self.doc.node_at(pos).map(|n| n.node_size()).unwrap_or(0);
                 (pos, pos + len)
             }
+            Selection::Cell { anchor, head } => {
+                // Render as a contiguous range covering both cells. A
+                // browser Range can't paint a true rectangular cell
+                // selection; the editor highlights cells via decorations.
+                let lo = anchor.min(head);
+                let hi = anchor.max(head);
+                let hi_end = self
+                    .doc
+                    .node_at(hi)
+                    .map(|n| hi + n.node_size())
+                    .unwrap_or(hi);
+                (lo, hi_end)
+            }
             Selection::All => (0, self.doc.content().size()),
         };
 
@@ -258,6 +271,16 @@ impl EditorView {
             Selection::Node { pos } => {
                 let len = self.doc.node_at(pos).map(|n| n.node_size()).unwrap_or(0);
                 (pos, pos + len)
+            }
+            Selection::Cell { anchor, head } => {
+                let lo = anchor.min(head);
+                let hi = anchor.max(head);
+                let hi_end = self
+                    .doc
+                    .node_at(hi)
+                    .map(|n| hi + n.node_size())
+                    .unwrap_or(hi);
+                (lo, hi_end)
             }
             Selection::All => (0, self.doc.content().size()),
         })
