@@ -8,6 +8,8 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-25
+
 ### Added
 
 - **`Code` inline-mark extension** — a `code` mark (`<code>`, toggled with
@@ -368,7 +370,8 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     caret are reflected visually. Both directions guard against echo
     loops via an `applying_selection` flag.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.1
 [0.3.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.2.0
 [0.1.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.1.0
