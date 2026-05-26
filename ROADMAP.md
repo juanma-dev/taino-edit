@@ -279,7 +279,7 @@ pointer-interaction platform.
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
 - 💤 Richer extensions: footnotes, mentions, math/KaTeX, embed
 - [x] Wire `TableView` into the Dioxus adapter — done 2026-05-26; `ViewPlugins` prop + pointer wiring, `basic-dioxus` table toolbar, browser tests. Full event- and plugin-wiring parity with Leptos.
-- 💤 Inline (range-level) decorations for third-party UI (search highlight, comments)
+- [x] Inline (range-level) decorations for third-party UI (search highlight, comments) — done 2026-05-26; `Decoration::Inline`, drawn as an overlay layer (no text-node splitting, so the diff/patch read-back is untouched), contributed via `ViewPlugin::decorations`. Browser-tested incl. a read-back-safety test.
 - 💤 Server-side rendering of the initial document (Leptos SSR)
 
 ## Out of scope for v0.1 (community contributions welcome)

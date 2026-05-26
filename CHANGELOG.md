@@ -8,6 +8,19 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Inline (range-level) decorations.** A new `Decoration::Inline { from, to,
+  class }` variant highlights an arbitrary inline range — search hits, comment
+  ranges, collaborative remote selections — for third-party UI. It is drawn as
+  an **overlay** (absolutely-positioned boxes, one per client rect, layered
+  above the text in a sibling-of-root layer) rather than by wrapping text in a
+  `<span>`. Wrapping would split the editable text nodes that the diff/patch
+  read-back relies on; the overlay leaves the editable DOM untouched, so typing
+  and reconciliation are unaffected. Plugins contribute them through the
+  existing `ViewPlugin::decorations` hook. Constructors: `Decoration::node(..)`
+  / `Decoration::inline(..)`.
+
 ## [0.4.0] - 2026-05-26
 
 The **Dioxus adapter reaches full `ViewPlugin` parity** with Leptos: tables

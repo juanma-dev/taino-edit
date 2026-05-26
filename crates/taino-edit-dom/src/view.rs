@@ -65,6 +65,10 @@ pub struct EditorView {
     decorations: Vec<Decoration>,
     /// DOM-aware plugins consulted for event handling and decorations.
     plugins: Vec<Box<dyn ViewPlugin>>,
+    /// The overlay layer for inline (range-level) decorations, created lazily
+    /// as a *sibling* of `root`. Kept out of `root` so it never shifts the
+    /// root's child indexing that selection mapping depends on.
+    overlay: Option<Element>,
 }
 
 impl std::fmt::Debug for EditorView {
@@ -75,6 +79,18 @@ impl std::fmt::Debug for EditorView {
             .field("decorations", &self.decorations)
             .field("plugins", &self.plugins.len())
             .finish_non_exhaustive()
+    }
+}
+
+impl Drop for EditorView {
+    fn drop(&mut self) {
+        // The inline-decoration overlay is a sibling of `root`, so it would
+        // otherwise outlive the view when the adapter removes the editor.
+        if let Some(layer) = &self.overlay {
+            if let Some(parent) = layer.parent_element() {
+                let _ = parent.remove_child(layer);
+            }
+        }
     }
 }
 
@@ -112,6 +128,7 @@ impl EditorView {
             composing: Cell::new(false),
             decorations: Vec::new(),
             plugins: Vec::new(),
+            overlay: None,
         }
     }
 
@@ -174,19 +191,124 @@ impl EditorView {
     /// Previous decorations are removed; new ones are applied. Decorations
     /// that target positions outside the current document are silently
     /// skipped.
+    ///
+    /// [`Node`](Decoration::Node) decorations toggle a CSS class on the target
+    /// element; [`Inline`](Decoration::Inline) decorations are drawn as boxes
+    /// in an overlay layer that is rebuilt wholesale on every call.
     pub fn set_decorations(&mut self, decorations: Vec<Decoration>) {
-        for d in self.decorations.clone() {
-            apply_decoration(&self.children, &d, false);
+        // Node decorations: remove the previous class set, then add the new.
+        for d in &self.decorations {
+            if matches!(d, Decoration::Node { .. }) {
+                apply_decoration(&self.children, d, false);
+            }
         }
         for d in &decorations {
-            apply_decoration(&self.children, d, true);
+            if matches!(d, Decoration::Node { .. }) {
+                apply_decoration(&self.children, d, true);
+            }
         }
+        // Inline decorations: redraw the overlay layer from scratch.
+        self.render_inline_overlay(&decorations);
         self.decorations = decorations;
     }
 
     /// The decorations currently applied.
     pub fn decorations(&self) -> &[Decoration] {
         &self.decorations
+    }
+
+    /// Redraw the inline-decoration overlay from `decorations`. Each inline
+    /// range becomes one box per client rect (so a range spanning lines draws
+    /// several boxes), positioned over the text it covers. The overlay is a
+    /// sibling of `root`, so it never alters the editable DOM — typing and the
+    /// diff/patch read-back are unaffected.
+    ///
+    /// Boxes are recomputed on every state change (adapters call
+    /// [`refresh_view_decorations`](Self::refresh_view_decorations) after each
+    /// update); they are *not* re-positioned on scroll/resize alone.
+    fn render_inline_overlay(&mut self, decorations: &[Decoration]) {
+        let any_inline = decorations
+            .iter()
+            .any(|d| matches!(d, Decoration::Inline { .. }));
+
+        // Don't create an overlay just to leave it empty.
+        let Some(layer) = self.ensure_overlay(any_inline) else {
+            return;
+        };
+        layer.set_inner_html("");
+        if !any_inline {
+            return;
+        }
+        let Some(document) = self.root.owner_document() else {
+            return;
+        };
+        // The overlay sits at its containing block's origin; its own client
+        // rect gives that origin in viewport coordinates, so each box can be
+        // placed relative to it regardless of the positioning context.
+        let origin = layer.get_bounding_client_rect();
+        for d in decorations {
+            let Decoration::Inline { from, to, class } = d else {
+                continue;
+            };
+            let (Some((sn, so)), Some((en, eo))) = (
+                doc_pos_to_dom(&self.root, &self.children, *from),
+                doc_pos_to_dom(&self.root, &self.children, *to),
+            ) else {
+                continue;
+            };
+            let Ok(range) = document.create_range() else {
+                continue;
+            };
+            if range.set_start(&sn, so).is_err() || range.set_end(&en, eo).is_err() {
+                continue;
+            }
+            let Some(rects) = range.get_client_rects() else {
+                continue;
+            };
+            for i in 0..rects.length() {
+                let Some(r) = rects.get(i) else { continue };
+                if r.width() <= 0.0 && r.height() <= 0.0 {
+                    continue;
+                }
+                let Ok(box_el) = document.create_element("span") else {
+                    continue;
+                };
+                let _ = box_el.set_attribute("class", class);
+                let style = format!(
+                    "position:absolute;left:{:.2}px;top:{:.2}px;width:{:.2}px;\
+                     height:{:.2}px;pointer-events:none;",
+                    r.left() - origin.left(),
+                    r.top() - origin.top(),
+                    r.width(),
+                    r.height(),
+                );
+                let _ = box_el.set_attribute("style", &style);
+                let _ = layer.append_child(&box_el);
+            }
+        }
+    }
+
+    /// The overlay layer, created as a sibling of `root` on first need. When
+    /// `want` is false and no overlay exists yet, returns `None` (don't make
+    /// one only to clear it). `None` too if `root` has no parent to host it.
+    fn ensure_overlay(&mut self, want: bool) -> Option<Element> {
+        if let Some(layer) = &self.overlay {
+            return Some(layer.clone());
+        }
+        if !want {
+            return None;
+        }
+        let parent = self.root.parent_element()?;
+        let document = self.root.owner_document()?;
+        let layer = document.create_element("div").ok()?;
+        let _ = layer.set_attribute("class", "taino-deco-layer");
+        let _ = layer.set_attribute(
+            "style",
+            "position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;",
+        );
+        let _ = parent.append_child(&layer);
+        self.overlay = Some(layer.clone());
+        Some(layer)
     }
 
     /// Programmatically focus the editor.
@@ -565,6 +687,9 @@ fn apply_decoration(children: &[ViewDesc], deco: &Decoration, add: bool) {
                 }
             }
         }
+        // Inline decorations are drawn in the overlay layer, not by toggling
+        // a class on document DOM — see `EditorView::render_inline_overlay`.
+        Decoration::Inline { .. } => {}
     }
 }
 

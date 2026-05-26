@@ -35,6 +35,7 @@ features = [
     "Selection",
     "Range",
     "DomRect",
+    "DomRectList",
     "Event",
     "EventTarget",
     "KeyboardEvent",
