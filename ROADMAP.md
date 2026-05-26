@@ -255,7 +255,7 @@ gate and it is green.
 - [x] Full Dioxus event-wiring parity (input → transform round-trip, IME, paste, selectionchange) — done 2026-05-22; verified end-to-end in headless Chromium
 - [x] Dioxus example toolbar + keymap parity (Bold/Italic/H1–H3/Undo/Redo) — done 2026-05-22
 - [~] ~~Migrate `History` onto the `Plugin` trait~~ — **decided against** (2026-05-22). The `Plugin` trait is for *observer* plugins that fold state forward from transactions (`apply(tx, prev, state) -> state` cannot touch the doc). `History` is a *driver*: undo/redo rewrite the document via the `HistoryIntent` short-circuit and mutate their own stacks outside the normal apply path. Forcing it onto the trait would either bloat the trait with history-specific hooks or be a fake migration that's still special-cased. History stays a first-class `EditorState` field; the Plugin trait stays clean for observers.
-- [ ] Formal `wasm_bindgen_test` browser tests for the Dioxus adapter (currently verified via a headless-Chromium script, not CI-wired)
+- [x] Formal `wasm_bindgen_test` browser tests for the Dioxus adapter — done 2026-05-26; `tests/component.rs` mounts `<TainoEditor>` in a real `dioxus-web` tree in headless Chromium (paragraph + table-with-plugin)
 
 ---
 
@@ -278,8 +278,7 @@ pointer-interaction platform.
 - 💤 `schema!{}` proc-macro DSL — sugar over the v0.1 builder
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
 - 💤 Richer extensions: footnotes, mentions, math/KaTeX, embed
-- 💤 Wire `TableView` into the Dioxus adapter (the plugin is framework-agnostic; only the Leptos adapter wires pointer events so far)
-- 💤 Formal `wasm_bindgen_test` browser tests for the Dioxus adapter
+- [x] Wire `TableView` into the Dioxus adapter — done 2026-05-26; `ViewPlugins` prop + pointer wiring, `basic-dioxus` table toolbar, browser tests. Full event- and plugin-wiring parity with Leptos.
 - 💤 Inline (range-level) decorations for third-party UI (search highlight, comments)
 - 💤 Server-side rendering of the initial document (Leptos SSR)
 

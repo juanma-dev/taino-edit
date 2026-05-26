@@ -112,6 +112,7 @@ dependencies = [
  "serde_json",
  "taino-edit-dioxus",
  "taino-edit-extensions",
+ "taino-edit-table-view",
 ]
 
 [[package]]
@@ -2464,8 +2465,12 @@ name = "taino-edit-dioxus"
 version = "0.3.1"
 dependencies = [
  "dioxus",
+ "dioxus-web",
+ "gloo-timers",
  "taino-edit-core",
  "taino-edit-dom",
+ "taino-edit-extensions",
+ "taino-edit-table-view",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",

@@ -6,17 +6,18 @@
 //! change and folding browser-side edits back into the signal.
 //!
 //! Browser events (`input`, `compositionstart`/`compositionend`, `paste`,
-//! `selectionchange`) are wired with the same raw `web-sys` listeners the
-//! Leptos adapter uses — they are registered on the mounted element (and,
-//! for `selectionchange`, on `document`) and kept alive in the component's
-//! runtime slot. The adapter has full event-wiring parity with
-//! `taino-edit-leptos`.
+//! pointer `mousedown`/`mousemove`/`mouseup`, `selectionchange`) are wired
+//! with the same raw `web-sys` listeners the Leptos adapter uses — they are
+//! registered on the mounted element (and, for `selectionchange`, on
+//! `document`) and kept alive in the component's runtime slot. Optional
+//! [`ViewPlugin`]s (e.g. `TableView`) can be installed via the [`ViewPlugins`]
+//! prop, giving full event- and plugin-wiring parity with `taino-edit-leptos`.
 
 #![deny(unsafe_code)]
 #![forbid(unstable_features)]
 #![warn(missing_docs, rust_2018_idioms)]
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use dioxus::prelude::*;
@@ -33,7 +34,57 @@ pub use taino_edit_core::{
 };
 /// Re-export the DOM-bridge surface.
 #[doc(no_inline)]
-pub use taino_edit_dom::{Decoration, EditorView, ViewDesc};
+pub use taino_edit_dom::{Decoration, EditorView, ViewAction, ViewDesc, ViewPlugin};
+
+/// A move-once container of DOM-aware [`ViewPlugin`]s for the
+/// [`TainoEditor`] `plugins` prop.
+///
+/// Dioxus props must be `Clone + PartialEq`; a bare
+/// `Vec<Box<dyn ViewPlugin>>` is neither, so the plugins live behind a shared
+/// cell that is cheap to clone. They are installed on the view exactly once
+/// at mount and never compared afterwards, so this type is deliberately
+/// "always equal": changing the prop after mount has no effect and must not
+/// trigger a re-render.
+///
+/// ```ignore
+/// use taino_edit_dioxus::{TainoEditor, ViewPlugins};
+/// use taino_edit_table_view::TableView;
+///
+/// rsx! { TainoEditor { state, plugins: ViewPlugins::new(vec![Box::new(TableView::new())]) } }
+/// ```
+#[derive(Clone, Default)]
+pub struct ViewPlugins(PluginCell);
+
+/// The shared, take-once backing store behind [`ViewPlugins`].
+type PluginCell = Rc<RefCell<Option<Vec<Box<dyn ViewPlugin>>>>>;
+
+impl ViewPlugins {
+    /// Wrap a set of view plugins for the `plugins` prop.
+    pub fn new(plugins: Vec<Box<dyn ViewPlugin>>) -> Self {
+        Self(Rc::new(RefCell::new(Some(plugins))))
+    }
+
+    /// Take the plugins out, leaving the container empty. Called once at
+    /// mount; any later call yields an empty vec.
+    fn take(&self) -> Vec<Box<dyn ViewPlugin>> {
+        self.0.borrow_mut().take().unwrap_or_default()
+    }
+}
+
+impl PartialEq for ViewPlugins {
+    // Mount-only and never re-read: every value compares equal so the prop
+    // can't cause spurious re-renders of `TainoEditor`.
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for ViewPlugins {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = self.0.borrow().as_ref().map_or(0, Vec::len);
+        f.debug_struct("ViewPlugins").field("pending", &n).finish()
+    }
+}
 
 /// A Dioxus component that renders an editor backed by a
 /// [`Signal<EditorState>`]. Whenever the signal changes, the mounted DOM is
@@ -51,7 +102,15 @@ pub use taino_edit_dom::{Decoration, EditorView, ViewDesc};
 /// }
 /// ```
 #[component]
-pub fn TainoEditor(state: Signal<EditorState>) -> Element {
+pub fn TainoEditor(
+    state: Signal<EditorState>,
+    /// Optional DOM-aware [`ViewPlugin`]s (e.g. `TableView` for table
+    /// cell-drag-select + resize). Installed on the view at mount; the
+    /// component wires pointer events to them and refreshes their
+    /// decorations on every state change.
+    #[props(default)]
+    plugins: ViewPlugins,
+) -> Element {
     // The mounted view + its event closures live here across renders.
     // EditorView is !Send + !Sync, which Dioxus signals tolerate.
     let mut runtime: Signal<Option<EditorRuntime>> = use_signal(|| None);
@@ -66,6 +125,9 @@ pub fn TainoEditor(state: Signal<EditorState>) -> Element {
                 let _ = rt.view.set_selection(snapshot.selection());
                 rt.applying_selection.set(false);
             }
+            // Refresh plugin decorations (e.g. table cell-selection
+            // highlight) for the current selection.
+            rt.view.refresh_view_decorations(Some(snapshot.selection()));
         }
     });
 
@@ -74,11 +136,13 @@ pub fn TainoEditor(state: Signal<EditorState>) -> Element {
             return;
         };
         let snapshot = state.read().clone();
-        let view = EditorView::mount(
+        let mut view = EditorView::mount(
             snapshot.doc().clone(),
             snapshot.schema().clone(),
             element.clone(),
         );
+        view.set_view_plugins(plugins.take());
+        view.refresh_view_decorations(Some(snapshot.selection()));
         let applying = Rc::new(Cell::new(false));
         let closures = wire_events(&element, runtime, state, applying.clone());
         runtime.set(Some(EditorRuntime {
@@ -206,6 +270,18 @@ fn wire_events(
     });
     push_listener(&mut closers, target.clone(), "paste", cb);
 
+    // Pointer events → view plugins (table cell-drag-select, resize). Each
+    // fires `handle_view_event`; a returned action is applied to state.
+    // No-op when no plugin claims the event.
+    for kind in ["mousedown", "mousemove", "mouseup"] {
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+            if let Some(Some(action)) = with_view(runtime, |v| v.handle_view_event(&ev)) {
+                apply_view_action(state, action);
+            }
+        });
+        push_listener(&mut closers, target.clone(), kind, cb);
+    }
+
     // `selectionchange` only fires on `document`; mirror the browser
     // selection into state so toolbar/keymap commands see the right
     // anchor/head. Drop the echo from our own effect-driven set_selection.
@@ -247,6 +323,33 @@ fn with_view<R>(
     runtime.peek().as_ref().map(|rt| f(&rt.view))
 }
 
+/// Apply a [`ViewAction`] produced by a view plugin to the state signal.
+fn apply_view_action(mut state: Signal<EditorState>, action: ViewAction) {
+    match action {
+        ViewAction::Select(sel) => {
+            let next = {
+                let snap = state.peek();
+                let mut tx = snap.tr();
+                tx.set_selection(sel);
+                tx.no_history();
+                snap.apply(tx)
+            };
+            state.set(next);
+        }
+        ViewAction::Command(cmd) => {
+            let snapshot = state.peek().clone();
+            let mut next = None;
+            {
+                let mut d = |tx: Transaction| next = Some(snapshot.apply(tx));
+                cmd(&snapshot, Some(&mut d));
+            }
+            if let Some(n) = next {
+                state.set(n);
+            }
+        }
+    }
+}
+
 /// Fold a DOM-bridge transform into the state signal.
 fn apply_transform(mut state: Signal<EditorState>, tr: &Transform) {
     let next = {
@@ -265,4 +368,34 @@ fn apply_transform(mut state: Signal<EditorState>, tr: &Transform) {
         snap.apply(tx)
     };
     state.set(next);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A trivial plugin (all-default trait impl) for exercising `ViewPlugins`.
+    struct Dummy;
+    impl ViewPlugin for Dummy {}
+
+    #[test]
+    fn view_plugins_take_is_once() {
+        let p = ViewPlugins::new(vec![Box::new(Dummy), Box::new(Dummy)]);
+        assert_eq!(p.take().len(), 2, "first take yields the installed plugins");
+        assert_eq!(
+            p.take().len(),
+            0,
+            "the container is empty after the first take"
+        );
+    }
+
+    #[test]
+    fn view_plugins_always_compare_equal() {
+        // Mount-only prop: every value is "equal" so it never forces a
+        // re-render of `TainoEditor`.
+        assert_eq!(
+            ViewPlugins::new(vec![Box::new(Dummy)]),
+            ViewPlugins::default()
+        );
+    }
 }

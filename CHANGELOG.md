@@ -8,6 +8,22 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Dioxus adapter: `ViewPlugin` parity with Leptos.** `TainoEditor` (Dioxus)
+  gained a `plugins` prop — a new `ViewPlugins` container — so DOM-aware
+  plugins like `TableView` (cell drag-select, selection highlight, column
+  resize) now work in Dioxus too. The component wires `mousedown`/`mousemove`/
+  `mouseup` to the plugins and refreshes their decorations on every state
+  change, giving full event- **and plugin**-wiring parity with
+  `taino-edit-leptos`. The `basic-dioxus` example gains a table toolbar +
+  `TableView`.
+- **Formal browser tests for the Dioxus adapter.** `tests/component.rs` mounts
+  `<TainoEditor>` in a real `dioxus-web` render tree in headless Chromium,
+  covering initial-document mount, `contenteditable`, and a table rendered
+  through the `TableView` plugin — closing the last deferred Dioxus-parity
+  item.
+
 ## [0.3.1] - 2026-05-25
 
 ### Added

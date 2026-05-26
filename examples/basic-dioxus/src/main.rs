@@ -2,20 +2,23 @@
 //! `Mod-…` keymap wired on keydown, and live HTML + JSON panels. Build
 //! with `dx serve` (or `trunk serve`) in this directory.
 //!
-//! The Dioxus adapter has full event-wiring parity with the Leptos one
-//! (input → transform, IME composition, paste, selectionchange) — type
-//! into the editor, click the toolbar, and watch the panels track the
+//! The Dioxus adapter has full event- and plugin-wiring parity with the
+//! Leptos one (input → transform, IME composition, paste, selectionchange,
+//! plus `ViewPlugin` pointer events) — type into the editor, click the
+//! toolbar, drag across table cells, and watch the panels track the
 //! document state.
 
 use dioxus::prelude::*;
 use taino_edit_dioxus::{
     set_block_type, toggle_mark, Attrs, Command, EditorState, KeyPress, NodeSpec, SchemaBuilder,
-    TainoEditor, Transaction,
+    TainoEditor, Transaction, ViewPlugins,
 };
 use taino_edit_extensions::{
-    build_keymap_with, build_schema_with, redo_command, undo_command, Bold, Heading, History,
-    Italic, Paragraph,
+    add_column_after, add_row_after, build_keymap_with, build_schema_with, delete_table,
+    insert_table, merge_cells, redo_command, select_cell_range, split_cell, toggle_header_row,
+    undo_command, Bold, Heading, History, Italic, Paragraph, Table,
 };
+use taino_edit_table_view::TableView;
 
 fn main() {
     dioxus::launch(App);
@@ -60,7 +63,7 @@ fn App() -> Element {
             },
         );
     let exts: Vec<&dyn taino_edit_extensions::Extension> =
-        vec![&Paragraph, &Heading, &Bold, &Italic, &History];
+        vec![&Paragraph, &Heading, &Bold, &Italic, &History, &Table];
     let schema = build_schema_with(base, &exts, "doc").expect("schema builds");
 
     let title = schema
@@ -94,7 +97,7 @@ fn App() -> Element {
     // borrows only need to live for the build call.
     let keymap = use_signal(move || {
         let exts: Vec<&dyn taino_edit_extensions::Extension> =
-            vec![&Paragraph, &Heading, &Bold, &Italic, &History];
+            vec![&Paragraph, &Heading, &Bold, &Italic, &History, &Table];
         build_keymap_with(&exts, &schema_for_keymap, /*mac=*/ false)
     });
 
@@ -105,6 +108,14 @@ fn App() -> Element {
         if let Some(mt) = schema.mark_type(mark) {
             run_cmd(state, toggle_mark(mt.clone()));
         }
+    };
+
+    // Merge the caret's whole row: select it end-to-end, then merge. The
+    // demo inserts 3×3 tables, so columns 0..=2 of row 0 cover a full row;
+    // a real app would drive `select_cell_range` from a mouse drag.
+    let on_merge_row = move |_| {
+        run_cmd(state, select_cell_range((0, 0), (0, 2)));
+        run_cmd(state, merge_cells());
     };
 
     let on_keydown = move |evt: KeyboardEvent| {
@@ -189,11 +200,51 @@ fn App() -> Element {
                     onclick: move |_| run_cmd(state, redo_command()),
                     "Redo (Mod-Shift-z)"
                 }
+                span { style: "width:.5rem" }
+                strong { style: "font-size:.8rem; color:#555; align-self:center;", "Table:" }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, insert_table(3, 3)),
+                    "⊞ Insert 3×3"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, add_row_after()),
+                    "+ Row"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, add_column_after()),
+                    "+ Col"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, toggle_header_row()),
+                    "Header row"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: on_merge_row,
+                    "Merge row"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, split_cell()),
+                    "Split cell"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, delete_table()),
+                    "Delete table"
+                }
             }
 
             div {
                 onkeydown: on_keydown,
-                TainoEditor { state }
+                TainoEditor {
+                    state,
+                    plugins: ViewPlugins::new(vec![Box::new(TableView::new())]),
+                }
             }
 
             section {

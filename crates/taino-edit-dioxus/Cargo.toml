@@ -37,3 +37,11 @@ features = [
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.71"
+
+# Browser-test-only deps. `dioxus-web` and `gloo-timers` are wasm-only, so
+# they are target-gated to keep `cargo test` (host) building cleanly.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+dioxus-web = "0.6"
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+taino-edit-extensions = { workspace = true }
+taino-edit-table-view = { workspace = true }
