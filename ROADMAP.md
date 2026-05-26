@@ -11,8 +11,8 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.3.1` — tables + ViewPlugin platform + Dioxus parity + inline `code` mark |
-| **Last updated**             | 2026-05-25                                               |
+| **Current release**          | `v0.4.0` — full Leptos↔Dioxus `ViewPlugin` parity (interactive tables in both) |
+| **Last updated**             | 2026-05-26                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|

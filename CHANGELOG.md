@@ -8,6 +8,13 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-26
+
+The **Dioxus adapter reaches full `ViewPlugin` parity** with Leptos: tables
+are now interactive (cell drag-select, selection highlight, column resize) in
+both frameworks, on the same framework-agnostic plugin platform — verified by
+a new headless-Chromium browser suite for the Dioxus adapter.
+
 ### Added
 
 - **Dioxus adapter: `ViewPlugin` parity with Leptos.** `TainoEditor` (Dioxus)
@@ -386,7 +393,8 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     caret are reflected visually. Both directions guard against echo
     loops via an `applying_selection` flag.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.4.0
 [0.3.1]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.1
 [0.3.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.0
 [0.2.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.2.0
