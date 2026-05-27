@@ -17,6 +17,8 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+/// The [`schema!`](taino_edit_core::schema) builder macro.
+pub use taino_edit_core::schema;
 /// Re-exports of the most-used `taino-edit-core` items so adapter consumers
 /// can stay on a single `use taino_edit_leptos::…` line.
 #[doc(no_inline)]

@@ -24,6 +24,10 @@
 
 pub use taino_edit_core as core;
 
+/// The [`schema!`](taino_edit_core::schema) builder macro, re-exported at the
+/// crate root for convenience.
+pub use taino_edit_core::schema;
+
 #[cfg(feature = "extensions")]
 pub use taino_edit_extensions as extensions;
 

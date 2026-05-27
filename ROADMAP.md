@@ -275,7 +275,7 @@ pointer-interaction platform.
 
 ## Deferred (v0.4+)
 
-- 💤 `schema!{}` proc-macro DSL — sugar over the v0.1 builder
+- [x] `schema!{}` DSL — sugar over the builder — done 2026-05-27. Implemented as a `macro_rules!` macro (not a proc-macro, per DESIGN_NOTES §6: no new crate, no deps), re-exported from the umbrella + adapters.
 - 💤 `loro` integration behind `collab` feature — collaborative editing via Peritext CRDT
 - 💤 Richer extensions: footnotes, mentions, math/KaTeX, embed
 - [x] Wire `TableView` into the Dioxus adapter — done 2026-05-26; `ViewPlugins` prop + pointer wiring, `basic-dioxus` table toolbar, browser tests. Full event- and plugin-wiring parity with Leptos.

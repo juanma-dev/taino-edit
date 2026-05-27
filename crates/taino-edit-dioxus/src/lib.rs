@@ -24,6 +24,8 @@ use dioxus::prelude::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+/// The [`schema!`](taino_edit_core::schema) builder macro.
+pub use taino_edit_core::schema;
 /// Re-export the core types adapter consumers reach for most.
 #[doc(no_inline)]
 pub use taino_edit_core::{

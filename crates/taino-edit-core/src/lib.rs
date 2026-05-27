@@ -47,6 +47,7 @@ mod plugin;
 mod pos;
 mod replace;
 mod schema;
+pub mod schema_macro;
 mod selection;
 mod slice;
 mod state;

@@ -34,6 +34,9 @@ pub mod paragraph;
 pub mod table;
 pub mod transform_case;
 
+/// The [`schema!`](taino_edit_core::schema) builder macro.
+pub use taino_edit_core::schema;
+
 pub use align::{align_center, align_justify, align_left, align_right, Align};
 pub use blockquote::Blockquote;
 pub use bold::Bold;

@@ -10,6 +10,14 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ### Added
 
+- **`schema! { .. }` macro** — declarative sugar over `SchemaBuilder` (a
+  `macro_rules!` macro, no proc-macro crate per DESIGN_NOTES §6). Declare nodes
+  and marks as compact `name { key: value, .. }` blocks instead of full
+  `NodeSpec { .. ..Default::default() }` literals: `content` / `group` /
+  `marks` strings, `inline` / `atom` bools, a `dom: "tag"` render shorthand or
+  explicit `to_dom`, a `parse: ["tag", ..]` list, and an `attrs: { name:
+  default }` block. Yields `Result<Schema, _>`. Re-exported from the umbrella
+  crate and the Leptos/Dioxus/extensions facades.
 - **Inline (range-level) decorations.** A new `Decoration::Inline { from, to,
   class }` variant highlights an arbitrary inline range — search hits, comment
   ranges, collaborative remote selections — for third-party UI. It is drawn as

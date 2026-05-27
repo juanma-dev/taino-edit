@@ -1,9 +1,9 @@
 //! [`Schema`] — the set of node and mark types a document may use — and the
 //! [`SchemaBuilder`] used to declare one.
 //!
-//! v0.1 exposes only the builder API. A `schema! {}` macro is deferred to
-//! v0.2 (it would be sugar over this builder, not a different architecture —
-//! see DESIGN_NOTES §6).
+//! The [`schema!`](crate::schema) macro is ergonomic sugar over this builder
+//! (see [`schema_macro`](crate::schema_macro)); it expands to the same
+//! `.node(..)` / `.mark(..)` / `.build()` calls.
 
 use std::collections::HashMap;
 use std::sync::Arc;
