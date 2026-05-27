@@ -680,12 +680,20 @@ fn render_text(node: &Node, document: &Document) -> ViewDesc {
 /// and skip it when reading text back.
 const TRAILING_BREAK_ATTR: &str = "data-taino-trailing-break";
 
-/// A block node that holds inline content (paragraph, heading, code block, …)
-/// — the nodes that need a trailing break when empty. Block *containers*
-/// (doc, blockquote, list item, table cell) hold other blocks and never sit
-/// empty in practice, so the simple `block && !leaf` test is enough.
+/// A block node that holds *inline* content (paragraph, heading, code block,
+/// …) — the nodes that need a trailing break when empty. Block *containers*
+/// (doc, blockquote, list, list item, table cell) hold other blocks and must
+/// **not** be treated as textblocks: doing so would (a) add stray breaks and
+/// (b) make `reconcile_trailing_break` strip a nested block's break. We detect
+/// inline content from the content expression (`inline*`, `text*`, …).
 fn is_textblock(node: &Node) -> bool {
-    node.is_block() && !node.is_leaf()
+    node.node_type().is_block()
+        && node
+            .node_type()
+            .spec()
+            .content
+            .as_deref()
+            .is_some_and(|c| c.contains("inline") || c.contains("text"))
 }
 
 /// Append a synthetic trailing `<br>` to `el`.
@@ -696,12 +704,25 @@ fn append_trailing_break(document: &Document, el: &Element) {
     }
 }
 
+/// Our trailing break among `el`'s **direct** children (never a descendant —
+/// we must not touch a nested block's break).
+fn direct_trailing_break(el: &Element) -> Option<Element> {
+    let kids = el.child_nodes();
+    for i in 0..kids.length() {
+        if let Some(node) = kids.item(i) {
+            if let Ok(e) = node.dyn_into::<Element>() {
+                if e.has_attribute(TRAILING_BREAK_ATTR) {
+                    return Some(e);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Add our trailing break when `empty` and missing; remove it when not empty.
 fn reconcile_trailing_break(document: &Document, el: &Element, empty: bool) {
-    let existing = el
-        .query_selector(&format!("br[{TRAILING_BREAK_ATTR}]"))
-        .ok()
-        .flatten();
+    let existing = direct_trailing_break(el);
     match (empty, existing) {
         (true, None) => append_trailing_break(document, el),
         (false, Some(br)) => {
