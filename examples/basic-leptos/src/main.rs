@@ -173,7 +173,12 @@ fn App() -> impl IntoView {
         if let Some(n) = next {
             state.set(n);
         }
-        if handled {
+        // The editor is authoritative from the model. Structural keys must
+        // never fall through to the browser's native contenteditable handling
+        // (which would mutate the DOM behind the model's back and desync it),
+        // even when no command applied this time.
+        let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete");
+        if handled || structural {
             ev.prevent_default();
         }
     };
