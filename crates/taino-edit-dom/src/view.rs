@@ -110,7 +110,9 @@ impl EditorView {
 
         // Empty `root`.
         while let Some(child) = root.first_child() {
-            let _ = root.remove_child(&child);
+            if root.remove_child(&child).is_err() {
+                break; // never spin if a child can't be removed
+            }
         }
 
         let mut children = Vec::with_capacity(doc.child_count());
@@ -953,7 +955,9 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             // duplicating content.
             if children.is_empty() {
                 while let Some(c) = dom.first_child() {
-                    let _ = dom.remove_child(&c);
+                    if dom.remove_child(&c).is_err() {
+                        break; // never spin if a child can't be removed
+                    }
                 }
             }
             let new_kids: Vec<Node> = new.content().iter().cloned().collect();

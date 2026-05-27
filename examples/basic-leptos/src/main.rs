@@ -72,6 +72,9 @@ fn collect_matches(parent: &Node, base: usize, query: &[char], out: &mut Vec<(us
 }
 
 fn main() {
+    // Surface Rust panics in the browser console (instead of a silent freeze)
+    // — invaluable while dog-fooding the editor.
+    console_error_panic_hook::set_once();
     leptos::mount::mount_to_body(App);
 }
 
