@@ -147,36 +147,75 @@ fn top_block(rp: &ResolvedPos) -> Option<(Node, usize, usize)> {
     Some((rp.node(1).clone(), rp.before(1), rp.after(1)))
 }
 
-/// Change the type (and attrs) of the block enclosing the selection — e.g.
-/// paragraph → heading. Behaves on text, node and all selections (it acts on
-/// the block at the selection's start).
+/// Every top-level (depth-1) block whose extent intersects the selection range
+/// `[from, to]`, each as `(node, before, after)` in document order.
+///
+/// Block-level commands (`set_block_type`, alignment, lists, blockquote) use
+/// this so they affect **all** blocks the selection touches, not just the one
+/// at its start. For an empty/boundary caret it falls back to the single
+/// enclosing block, preserving caret behavior.
+pub fn top_blocks_in_range(doc: &Node, from: usize, to: usize) -> Vec<(Node, usize, usize)> {
+    let mut out = Vec::new();
+    let mut pos = 0usize;
+    for child in doc.content().iter() {
+        let start = pos;
+        let after = start + child.node_size();
+        if from < after && to > start {
+            out.push((child.clone(), start, after));
+        }
+        pos = after;
+    }
+    if out.is_empty() {
+        if let Ok(rp) = ResolvedPos::resolve(doc, from) {
+            if let Some(b) = top_block(&rp) {
+                out.push(b);
+            }
+        }
+    }
+    out
+}
+
+/// Change the type (and attrs) of every block the selection touches — e.g.
+/// paragraph → heading across several selected paragraphs. Each convertible
+/// textblock keeps its inline content and marks. Re-typing preserves block
+/// sizes, so the collected positions stay valid across the whole transaction.
 pub fn set_block_type(node: &str, attrs: Attrs) -> Command {
     let node = node.to_string();
     Box::new(move |state, dispatch| {
-        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
-            return false;
-        };
-        let Some((block, start, end)) = top_block(&rp) else {
-            return false;
-        };
-        if block.is_text() || !block.node_type().is_block() {
+        let sel = state.selection();
+        let blocks = top_blocks_in_range(state.doc(), sel.from(), sel.to(state.doc()));
+        // Build a replacement for each convertible block (skip non-blocks and
+        // any whose content the target type can't hold).
+        let mut targets: Vec<(usize, usize, Node)> = Vec::new();
+        for (block, start, end) in blocks {
+            if block.is_text() || !block.node_type().is_block() {
+                continue;
+            }
+            if let Ok(new_block) = state.schema().node(
+                &node,
+                attrs.clone(),
+                block.content().children().to_vec(),
+                block.marks().to_vec(),
+            ) {
+                targets.push((start, end, new_block));
+            }
+        }
+        if targets.is_empty() {
             return false;
         }
-        let Ok(new_block) = state.schema().node(
-            &node,
-            attrs.clone(),
-            block.content().children().to_vec(),
-            block.marks().to_vec(),
-        ) else {
-            return false;
-        };
         if let Some(d) = dispatch {
             let mut tx = state.tr();
-            if tx
-                .transform()
-                .replace(start, end, node_slice(new_block), state.schema())
-                .is_ok()
-            {
+            let mut any = false;
+            for (start, end, new_block) in targets {
+                if tx
+                    .transform()
+                    .replace(start, end, node_slice(new_block), state.schema())
+                    .is_ok()
+                {
+                    any = true;
+                }
+            }
+            if any {
                 d(tx);
             }
         }
@@ -184,19 +223,20 @@ pub fn set_block_type(node: &str, attrs: Attrs) -> Command {
     })
 }
 
-/// Wrap the block enclosing the selection in a new parent node.
+/// Wrap every block the selection touches in a single new parent node — e.g.
+/// three selected paragraphs become one blockquote containing all three.
 pub fn wrap_in(node: &str, attrs: Attrs) -> Command {
     let node = node.to_string();
     Box::new(move |state, dispatch| {
         if state.schema().node_type(&node).is_none() {
             return false;
         }
-        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+        let sel = state.selection();
+        let blocks = top_blocks_in_range(state.doc(), sel.from(), sel.to(state.doc()));
+        let (Some((_, start, _)), Some((_, _, end))) = (blocks.first(), blocks.last()) else {
             return false;
         };
-        let Some((_, start, end)) = top_block(&rp) else {
-            return false;
-        };
+        let (start, end) = (*start, *end);
         let Ok(wrapper) = state
             .schema()
             .create_node(&node, attrs.clone(), vec![], vec![])

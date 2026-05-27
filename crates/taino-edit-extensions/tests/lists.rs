@@ -88,6 +88,30 @@ fn wrap_in_ordered_list_wraps_paragraph() {
 }
 
 #[test]
+fn wrap_in_list_gathers_all_selected_paragraphs_into_one_list() {
+    let s = schema();
+    let doc = s
+        .node(
+            "doc",
+            Default::default(),
+            vec![paragraph(&s, "a"), paragraph(&s, "b")],
+            vec![],
+        )
+        .unwrap();
+    let st = EditorState::new(doc, s);
+    let mut t = st.tr();
+    t.set_selection(Selection::Text { anchor: 1, head: 5 }); // spans both paragraphs
+    let st = st.apply(t);
+
+    let st = run(st, &wrap_in_bullet_list());
+    let html = st.doc().to_html();
+    assert!(
+        html.contains("<ul><li><p>a</p></li><li><p>b</p></li></ul>"),
+        "both paragraphs should become items of one list, got: {html}"
+    );
+}
+
+#[test]
 fn lift_list_item_unwraps_single_item_list() {
     let s = state_with_paragraph("hello");
     let s = run(s, &wrap_in_bullet_list());

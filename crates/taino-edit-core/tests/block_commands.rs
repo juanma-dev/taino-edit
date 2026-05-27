@@ -92,6 +92,47 @@ fn run(cmd: &Command, st: &EditorState) -> Option<EditorState> {
     out
 }
 
+fn range(st: EditorState, anchor: usize, head: usize) -> EditorState {
+    let mut t = st.tr();
+    t.set_selection(Selection::Text { anchor, head });
+    st.apply(t)
+}
+
+#[test]
+fn set_block_type_applies_to_every_selected_block() {
+    let s = schema();
+    // Three paragraphs; select from inside the first to inside the third.
+    let d = doc(&s, vec![para(&s, "a"), para(&s, "b"), para(&s, "c")]);
+    let st = range(EditorState::new(d, s.clone()), 1, 8);
+    let out = run(&set_block_type("heading", Attrs::new()), &st).unwrap();
+    assert_eq!(out.doc().child_count(), 3);
+    for i in 0..3 {
+        assert_eq!(
+            out.doc().child(i).node_type().name(),
+            "heading",
+            "block {i} should be a heading"
+        );
+    }
+    assert_eq!(out.doc().text_content(), "abc");
+}
+
+#[test]
+fn wrap_in_wraps_all_selected_blocks_in_one_node() {
+    let s = schema();
+    let d = doc(&s, vec![para(&s, "a"), para(&s, "b"), para(&s, "c")]);
+    let st = range(EditorState::new(d, s.clone()), 1, 8);
+    let out = run(&wrap_in("blockquote", Attrs::new()), &st).unwrap();
+    assert_eq!(
+        out.doc().child_count(),
+        1,
+        "one blockquote at the top level"
+    );
+    let bq = out.doc().child(0);
+    assert_eq!(bq.node_type().name(), "blockquote");
+    assert_eq!(bq.child_count(), 3, "all three paragraphs inside it");
+    assert_eq!(out.doc().text_content(), "abc");
+}
+
 #[test]
 fn set_block_type_changes_paragraph_to_heading() {
     let s = schema();

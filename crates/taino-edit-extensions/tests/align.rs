@@ -48,6 +48,67 @@ fn make_state() -> EditorState {
     s
 }
 
+/// Two paragraphs with the selection spanning both.
+fn two_paragraphs_selected() -> EditorState {
+    let base = SchemaBuilder::new()
+        .node(
+            "doc",
+            NodeSpec {
+                content: Some("block+".into()),
+                ..Default::default()
+            },
+        )
+        .node(
+            "text",
+            NodeSpec {
+                group: Some("inline".into()),
+                ..Default::default()
+            },
+        );
+    let schema = build_schema_with(base, &[&Paragraph, &Heading, &Align], "doc").unwrap();
+    let p0 = schema
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![schema.text("hi", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let p1 = schema
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![schema.text("yo", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let doc = schema
+        .node("doc", Default::default(), vec![p0, p1], vec![])
+        .unwrap();
+    let mut s = EditorState::new(doc, schema);
+    let mut t = s.tr();
+    t.set_selection(Selection::Text { anchor: 1, head: 6 }); // spans both paragraphs
+    s = s.apply(t);
+    s
+}
+
+#[test]
+fn align_applies_to_every_selected_paragraph() {
+    let s = two_paragraphs_selected();
+    let s = run(s, &align_center());
+    let j = s.doc().to_json();
+    assert_eq!(
+        j["content"][0]["attrs"]["text_align"],
+        json!("center"),
+        "first paragraph centered"
+    );
+    assert_eq!(
+        j["content"][1]["attrs"]["text_align"],
+        json!("center"),
+        "second paragraph centered too"
+    );
+}
+
 #[test]
 fn paragraph_declares_text_align_attr() {
     let adds = Paragraph.schema_additions();

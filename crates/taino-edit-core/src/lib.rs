@@ -58,7 +58,8 @@ pub use attrs::{AttrValue, Attrs};
 pub use commands::{
     caret_left, caret_line_end, caret_line_start, caret_right, chain, delete_backward,
     delete_forward, delete_selection, join_backward, join_forward, lift, remove_mark, select_all,
-    set_block_type, set_mark, split_block, toggle_mark, wrap_in, Command, Dispatch,
+    set_block_type, set_mark, split_block, toggle_mark, top_blocks_in_range, wrap_in, Command,
+    Dispatch,
 };
 pub use content::ContentMatch;
 pub use error::{DocError, SchemaError};

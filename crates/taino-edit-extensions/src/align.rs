@@ -8,7 +8,7 @@
 //! exported so toolbar buttons can call them directly.
 
 use taino_edit_core::{
-    AttrSpec, AttrValue, Attrs, Command, HtmlElement, ResolvedPos, Schema, Selection,
+    top_blocks_in_range, AttrSpec, AttrValue, Attrs, Command, HtmlElement, Schema, Selection,
 };
 
 use crate::{Extension, SchemaAdditions};
@@ -82,18 +82,16 @@ impl Extension for Align {
 
 fn set_align(value: Option<&'static str>) -> Command {
     Box::new(move |state, dispatch| {
-        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
-            return false;
-        };
-        if rp.depth() == 0 {
-            return false;
-        }
-        // Find the outermost (depth-1) enclosing block — set_block_type
-        // operates on the same target so toolbar + keymap stay consistent.
-        let block_pos = rp.before(1);
-        let block = rp.node(1);
-        if !block.node_type().spec().attrs.contains_key("text_align") {
-            return false; // this block type does not support alignment
+        let sel = state.selection();
+        // Every selected depth-1 block that supports alignment. Setting an
+        // attr preserves block sizes, so the collected positions stay valid.
+        let targets: Vec<usize> = top_blocks_in_range(state.doc(), sel.from(), sel.to(state.doc()))
+            .into_iter()
+            .filter(|(block, _, _)| block.node_type().spec().attrs.contains_key("text_align"))
+            .map(|(_, before, _)| before)
+            .collect();
+        if targets.is_empty() {
+            return false; // no selected block supports alignment
         }
         let new_value = match value {
             Some(v) => AttrValue::from(v.to_string()),
@@ -101,11 +99,17 @@ fn set_align(value: Option<&'static str>) -> Command {
         };
         if let Some(d) = dispatch {
             let mut tx = state.tr();
-            if tx
-                .transform()
-                .set_node_attr(block_pos, "text_align", new_value, state.schema())
-                .is_ok()
-            {
+            let mut any = false;
+            for block_pos in targets {
+                if tx
+                    .transform()
+                    .set_node_attr(block_pos, "text_align", new_value.clone(), state.schema())
+                    .is_ok()
+                {
+                    any = true;
+                }
+            }
+            if any {
                 // Preserve the selection — the doc size doesn't change.
                 tx.set_selection(state.selection());
                 d(tx);

@@ -19,8 +19,8 @@
 use std::collections::HashMap;
 
 use taino_edit_core::{
-    chain, AttrSpec, AttrValue, Attrs, Command, DomSpec, Fragment, HtmlElement, NodeSpec,
-    ParseRule, ResolvedPos, Schema, Selection, Slice,
+    chain, top_blocks_in_range, AttrSpec, AttrValue, Attrs, Command, DomSpec, Fragment,
+    HtmlElement, Node, NodeSpec, ParseRule, ResolvedPos, Schema, Selection, Slice,
 };
 
 use crate::{Extension, SchemaAdditions};
@@ -129,28 +129,37 @@ fn wrap_in_list(list_name: &'static str) -> Command {
         if schema.node_type(list_name).is_none() || schema.node_type("list_item").is_none() {
             return false;
         }
-        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
-            return false;
-        };
-        if rp.depth() == 0 {
-            return false;
-        }
-        let block = rp.node(1).clone();
-        if !block.node_type().is_block() {
-            return false;
-        }
+        let sel = state.selection();
         // Already inside a list_item? Then this command doesn't apply
         // (use lift/sink to navigate the structure instead).
-        if rp.depth() >= 2 && rp.node(rp.depth() - 1).node_type().name() == "list_item" {
+        if let Ok(rp) = ResolvedPos::resolve(state.doc(), sel.from()) {
+            if rp.depth() == 0 {
+                return false;
+            }
+            if rp.depth() >= 2 && rp.node(rp.depth() - 1).node_type().name() == "list_item" {
+                return false;
+            }
+        } else {
             return false;
         }
-        let start = rp.before(1);
-        let end = rp.after(1);
-        let li = match schema.create_node("list_item", Attrs::new(), vec![block.clone()], vec![]) {
-            Ok(n) => n,
-            Err(_) => return false,
+        // Every selected top-level block becomes one list_item, all gathered
+        // into a single list spanning the selection.
+        let blocks = top_blocks_in_range(state.doc(), sel.from(), sel.to(state.doc()));
+        let (Some((_, start, _)), Some((_, _, end))) = (blocks.first(), blocks.last()) else {
+            return false;
         };
-        let list = match schema.create_node(list_name, Attrs::new(), vec![li], vec![]) {
+        let (start, end) = (*start, *end);
+        let mut items: Vec<Node> = Vec::with_capacity(blocks.len());
+        for (block, _, _) in &blocks {
+            if !block.node_type().is_block() || block.is_text() {
+                return false;
+            }
+            match schema.create_node("list_item", Attrs::new(), vec![block.clone()], vec![]) {
+                Ok(li) => items.push(li),
+                Err(_) => return false,
+            }
+        }
+        let list = match schema.create_node(list_name, Attrs::new(), items, vec![]) {
             Ok(n) => n,
             Err(_) => return false,
         };
