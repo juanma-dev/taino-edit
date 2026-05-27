@@ -8,6 +8,32 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Caret drift inside nested content.** The DOM↔document position mapping
+  didn't count an element's opening token when descending into a child, so a
+  caret inside nested content (e.g. a list item's paragraph) drifted one
+  position per nesting level — making Backspace delete the wrong character and
+  Enter split at the wrong spot. Flat documents were unaffected.
+- **Block-level commands now apply to every selected block.** `set_block_type`,
+  alignment, blockquote and lists acted only on the block at the selection's
+  start; selecting several paragraphs and choosing a heading / alignment /
+  quote / list now affects them all (via `top_blocks_in_range`).
+- **Empty textblocks (incl. new list items) are focusable and typable.** An
+  empty paragraph rendered as a bare `<p></p>` couldn't hold a caret; it now
+  renders a trailing `<br>`, and a misclassification that stripped a nested
+  block's break was fixed.
+- **Native structural keys can't desync the model.** The example always
+  `preventDefault`s Enter/Backspace/Delete, so the browser's contenteditable
+  never inserts DOM the model doesn't track.
+- No longer hangs when clearing DOM children if a removal is rejected.
+
+### Added
+
+- **List-aware Backspace** (`backspace_in_list`): at the start of a list item
+  it lifts the item out of the list; elsewhere it falls through to the normal
+  delete.
+
 ## [0.5.0] - 2026-05-27
 
 Ergonomics + third-party-UI decorations: a `schema!` macro over the builder,
