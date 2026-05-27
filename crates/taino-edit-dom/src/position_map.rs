@@ -53,7 +53,15 @@ fn resolve_inside(desc: &ViewDesc, content_offset: usize) -> Option<(web_sys::No
                     return Some((dom.clone().into(), idx as u32));
                 }
                 if content_offset > cur && content_offset < cur + csize {
-                    return resolve_inside(c, content_offset - cur);
+                    // Offset into `c`, measured from its start. Descending into
+                    // an element child skips its opening token (text nodes have
+                    // none), so subtract 1 for elements.
+                    let inner = content_offset - cur;
+                    let inner = match c {
+                        ViewDesc::Element { .. } => inner - 1,
+                        ViewDesc::Text { .. } => inner,
+                    };
+                    return resolve_inside(c, inner);
                 }
                 cur += csize;
             }
@@ -137,7 +145,13 @@ fn inside_for_dom(
             }
             let mut pos = pos_at_content_start;
             for c in children {
-                if let Some(p) = inside_for_dom(c, target, offset, pos) {
+                // A child element's content starts one past its own position
+                // (its opening token); a text child's chars start at `pos`.
+                let child_start = match c {
+                    ViewDesc::Element { .. } => pos + 1,
+                    ViewDesc::Text { .. } => pos,
+                };
+                if let Some(p) = inside_for_dom(c, target, offset, child_start) {
                     return Some(p);
                 }
                 pos += c.node().node_size();

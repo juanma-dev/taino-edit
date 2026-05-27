@@ -31,6 +31,15 @@ fn schema() -> Schema {
             },
         )
         .node(
+            "blockquote",
+            NodeSpec {
+                content: Some("block+".into()),
+                group: Some("block".into()),
+                to_dom: Some(|_| DomSpec::element("blockquote")),
+                ..Default::default()
+            },
+        )
+        .node(
             "text",
             NodeSpec {
                 group: Some("inline".into()),
@@ -39,6 +48,11 @@ fn schema() -> Schema {
         )
         .top_node("doc")
         .build()
+        .unwrap()
+}
+
+fn blockquote(s: &Schema, inner: Vec<Node>) -> Node {
+    s.node("blockquote", Default::default(), inner, vec![])
         .unwrap()
 }
 
@@ -85,6 +99,65 @@ fn set_caret_in_text_writes_dom_selection() {
     let text: Text = anchor.dyn_into().unwrap();
     assert_eq!(text.data(), "Hello");
     assert_eq!(sel.anchor_offset(), 2);
+    cleanup(root);
+}
+
+#[wasm_bindgen_test]
+fn caret_in_nested_block_round_trips() {
+    // doc > blockquote > paragraph > "Hello". The caret between 'e' and 'l'
+    // (text offset 2) is doc position 4. Before the position-map fix, the
+    // single nesting level shifted this by 1.
+    let s = schema();
+    let doc = s
+        .node(
+            "doc",
+            Default::default(),
+            vec![blockquote(&s, vec![para(&s, "Hello")])],
+            vec![],
+        )
+        .unwrap();
+    let (view, root) = attach(doc, s);
+
+    view.set_selection(Selection::caret(4)).unwrap();
+    let sel = selection();
+    let text: Text = sel.anchor_node().unwrap().dyn_into().unwrap();
+    assert_eq!(text.data(), "Hello");
+    assert_eq!(sel.anchor_offset(), 2, "caret must land at text offset 2");
+    assert_eq!(
+        view.read_selection(),
+        Some(Selection::Text { anchor: 4, head: 4 }),
+        "reading the DOM selection back must yield the same doc position"
+    );
+    cleanup(root);
+}
+
+#[wasm_bindgen_test]
+fn caret_in_doubly_nested_block_round_trips() {
+    // doc > blockquote > blockquote > paragraph > "Hello" (two levels, like a
+    // list's list_item > paragraph). Caret at text offset 2 = doc position 5.
+    let s = schema();
+    let doc = s
+        .node(
+            "doc",
+            Default::default(),
+            vec![blockquote(
+                &s,
+                vec![blockquote(&s, vec![para(&s, "Hello")])],
+            )],
+            vec![],
+        )
+        .unwrap();
+    let (view, root) = attach(doc, s);
+
+    view.set_selection(Selection::caret(5)).unwrap();
+    let sel = selection();
+    let text: Text = sel.anchor_node().unwrap().dyn_into().unwrap();
+    assert_eq!(text.data(), "Hello");
+    assert_eq!(sel.anchor_offset(), 2, "two nesting levels must not drift");
+    assert_eq!(
+        view.read_selection(),
+        Some(Selection::Text { anchor: 5, head: 5 })
+    );
     cleanup(root);
 }
 
