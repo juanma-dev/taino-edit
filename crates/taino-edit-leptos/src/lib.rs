@@ -60,6 +60,13 @@ pub fn TainoEditor(
     /// decorations on every state change.
     #[prop(optional)]
     plugins: Vec<Box<dyn ViewPlugin>>,
+    /// Optional [`Keymap`] for keyboard editing. When provided, the component
+    /// owns `keydown`: it reads the *live* DOM selection, runs the matching
+    /// command, and applies the result to the view **synchronously** (so the
+    /// caret and DOM never lag the model). Build it with
+    /// `taino_edit_extensions::build_keymap_with`.
+    #[prop(optional)]
+    keymap: Option<Keymap>,
 ) -> impl IntoView {
     let node_ref = NodeRef::<leptos::html::Div>::new();
     // `EditorView` + its event closures are `!Send + !Sync`. Keep them in
@@ -70,6 +77,8 @@ pub fn TainoEditor(
     // local slot the mount branch takes from.
     let plugins_slot: StoredValue<Option<Vec<Box<dyn ViewPlugin>>>, LocalStorage> =
         StoredValue::new_local(Some(plugins));
+    // The keymap is `!Send` too; park it so the keydown closure can reach it.
+    let keymap_slot: StoredValue<Option<Keymap>, LocalStorage> = StoredValue::new_local(keymap);
 
     Effect::new(move |_| {
         let snapshot = state.get();
@@ -111,7 +120,7 @@ pub fn TainoEditor(
                 view.set_view_plugins(plugins);
                 view.refresh_view_decorations(Some(snapshot.selection()));
                 let applying = std::rc::Rc::new(std::cell::Cell::new(false));
-                let closures = wire_events(&element, runtime, state, applying.clone());
+                let closures = wire_events(&element, runtime, state, applying.clone(), keymap_slot);
                 *rt = Some(EditorRuntime {
                     view,
                     closures,
@@ -165,6 +174,7 @@ fn wire_events(
     runtime: StoredValue<Option<EditorRuntime>, LocalStorage>,
     state: RwSignal<EditorState>,
     applying_selection: std::rc::Rc<std::cell::Cell<bool>>,
+    keymap_slot: StoredValue<Option<Keymap>, LocalStorage>,
 ) -> Vec<EventCloser> {
     let target: web_sys::EventTarget = el.clone().into();
     let mut closers: Vec<EventCloser> = Vec::new();
@@ -216,6 +226,61 @@ fn wire_events(
             }
         });
         register("input", cb);
+
+        // `keydown`: with a keymap installed, the editor owns keyboard editing.
+        // Read the *live* DOM selection (so the command acts on the real caret,
+        // not a lagging model selection), run the matching command, then apply
+        // the result to the view + selection **synchronously** — never via the
+        // async effect — so the DOM/caret can't fall out of step before the
+        // next keystroke.
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+            let Ok(kev) = ev.dyn_into::<web_sys::KeyboardEvent>() else {
+                return;
+            };
+            let key = KeyPress {
+                key: kev.key(),
+                ctrl: kev.ctrl_key(),
+                alt: kev.alt_key(),
+                shift: kev.shift_key(),
+                meta: kev.meta_key(),
+            };
+            let mut cur = state.get_untracked();
+            if let Some(Some(live)) = with_view(runtime, |v| v.read_selection()) {
+                if live != cur.selection() {
+                    let mut tx = cur.tr();
+                    tx.set_selection(live);
+                    tx.no_history();
+                    cur = cur.apply(tx);
+                }
+            }
+            let mut next = None;
+            let handled = keymap_slot.with_value(|km| match km {
+                Some(km) => {
+                    let mut d = |t: Transaction| next = Some(cur.apply(t));
+                    km.handle(&cur, &key, Some(&mut d))
+                }
+                None => false,
+            });
+            if let Some(n) = next {
+                runtime.update_value(|rt| {
+                    if let Some(r) = rt.as_mut() {
+                        r.view.update(n.doc().clone());
+                        r.applying_selection.set(true);
+                        let _ = r.view.set_selection(n.selection());
+                        r.applying_selection.set(false);
+                        r.view.refresh_view_decorations(Some(n.selection()));
+                    }
+                });
+                state.set(n);
+            }
+            // Structural keys are model-authoritative: never let native
+            // contenteditable handling mutate the document.
+            let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete");
+            if handled || structural {
+                kev.prevent_default();
+            }
+        });
+        register("keydown", cb);
 
         // IME composition: suspend reads while composing, commit on end.
         let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {

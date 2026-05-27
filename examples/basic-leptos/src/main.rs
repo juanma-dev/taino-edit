@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use leptos::ev::{KeyboardEvent, MouseEvent};
+use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 use taino_edit_extensions::{
     add_column_after, add_row_after, align_center, align_justify, align_left, align_right,
@@ -19,8 +19,7 @@ use taino_edit_extensions::{
 };
 use taino_edit_leptos::{
     set_block_type, toggle_mark, wrap_in, Attrs, Command, Decoration, EditorState, EditorView,
-    KeyPress, Keymap, Node, NodeSpec, SchemaBuilder, Selection, TainoEditor, Transaction,
-    ViewPlugin,
+    Node, NodeSpec, SchemaBuilder, Selection, TainoEditor, Transaction, ViewPlugin,
 };
 
 /// A demo [`ViewPlugin`] that highlights every (case-insensitive) occurrence
@@ -152,36 +151,11 @@ fn App() -> impl IntoView {
         state.update(|_| {});
     };
 
-    // ------- keymap (kept in local storage because it's !Send) ------------
-    let keymap_holder: StoredValue<Keymap, LocalStorage> =
-        StoredValue::new_local(build_keymap_with(&exts, &schema, /*mac=*/ false));
-
-    let on_keydown = move |ev: KeyboardEvent| {
-        let key = KeyPress {
-            key: ev.key(),
-            ctrl: ev.ctrl_key(),
-            alt: ev.alt_key(),
-            shift: ev.shift_key(),
-            meta: ev.meta_key(),
-        };
-        let mut next = None;
-        let mut dispatch = |tx: Transaction| {
-            next = Some(state.get_untracked().apply(tx));
-        };
-        let handled = keymap_holder
-            .with_value(|km| km.handle(&state.get_untracked(), &key, Some(&mut dispatch)));
-        if let Some(n) = next {
-            state.set(n);
-        }
-        // The editor is authoritative from the model. Structural keys must
-        // never fall through to the browser's native contenteditable handling
-        // (which would mutate the DOM behind the model's back and desync it),
-        // even when no command applied this time.
-        let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete");
-        if handled || structural {
-            ev.prevent_default();
-        }
-    };
+    // ------- keymap ------------------------------------------------------
+    // `<TainoEditor>` now owns keyboard editing (it reads the live DOM
+    // selection and applies commands synchronously), so we just hand it the
+    // keymap built from the same extensions.
+    let keymap = build_keymap_with(&exts, &schema, /*mac=*/ false);
 
     // ------- toolbar helpers ----------------------------------------------
     let strong = schema.mark_type("strong").unwrap().clone();
@@ -380,15 +354,14 @@ fn App() -> impl IntoView {
                 <span style="font-size:.8rem; color:#888;">"(inline-decoration overlay)"</span>
             </div>
 
-            <div on:keydown=on_keydown>
-                <TainoEditor
-                    state=state
-                    plugins=vec![
-                        Box::new(taino_edit_table_view::TableView::new()) as Box<dyn ViewPlugin>,
-                        Box::new(SearchHighlight { query: search_for_plugin }) as Box<dyn ViewPlugin>,
-                    ]
-                />
-            </div>
+            <TainoEditor
+                state=state
+                keymap=keymap
+                plugins=vec![
+                    Box::new(taino_edit_table_view::TableView::new()) as Box<dyn ViewPlugin>,
+                    Box::new(SearchHighlight { query: search_for_plugin }) as Box<dyn ViewPlugin>,
+                ]
+            />
 
             <section style="margin-top:1.5rem; display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
                 <div>
