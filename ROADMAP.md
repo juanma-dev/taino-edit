@@ -11,8 +11,8 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.4.0` — full Leptos↔Dioxus `ViewPlugin` parity (interactive tables in both) |
-| **Last updated**             | 2026-05-26                                               |
+| **Current release**          | `v0.5.0` — `schema!` macro + inline (range-level) decorations + editing fixes |
+| **Last updated**             | 2026-05-27                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|
@@ -272,6 +272,12 @@ pointer-interaction platform.
 - [x] New crate `taino-edit-table-view` — `TableView`: cell drag-select, selection highlight, column-resize
 - [x] Leptos `<TainoEditor>` `plugins` prop + pointer wiring; `basic-leptos` table toolbar + drag/resize
 - [x] Interaction + invariant host tests + headless-Chromium browser tests (table rendering, ViewPlugin infra, TableView)
+
+## Known issues
+
+- 🐛 Applying a mark/block type to a multi-word selection occasionally leaves
+  the trailing word(s) unformatted — an intermittent selection-boundary
+  mapping issue (reported during v0.5 manual testing). Next-up to investigate.
 
 ## Deferred (v0.4+)
 

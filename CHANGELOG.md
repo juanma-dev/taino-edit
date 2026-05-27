@@ -8,6 +8,13 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-27
+
+Ergonomics + third-party-UI decorations: a `schema!` macro over the builder,
+**inline (range-level) decorations** drawn as a scroll-aware overlay (search
+highlights, comments, remote selections), and editing/UX fixes surfaced by a
+new `basic-leptos` search demo.
+
 ### Added
 
 - **`schema! { .. }` macro** — declarative sugar over `SchemaBuilder` (a
@@ -28,6 +35,32 @@ Pre-1.0, minor version bumps may include breaking API changes.
   and reconciliation are unaffected. Plugins contribute them through the
   existing `ViewPlugin::decorations` hook. Constructors: `Decoration::node(..)`
   / `Decoration::inline(..)`.
+- **Inline-decoration reposition on scroll/resize.**
+  `EditorView::reposition_inline_decorations()` repaints the overlay from the
+  current layout; the Leptos and Dioxus adapters wire it to `scroll` (capture)
+  and `resize` so highlights track the text when the geometry shifts without a
+  document edit.
+- **`basic-leptos` search-highlight demo** — a `SearchHighlight` `ViewPlugin`
+  plus a search box highlight matches live via inline decorations (an
+  end-to-end example of the feature).
+
+### Fixed
+
+- **Empty textblocks are now focusable and typable.** An empty paragraph/
+  heading rendered as a bare `<p></p>` — zero-height and impossible to place
+  the caret in, so pressing Enter appeared to do nothing. Empty textblocks now
+  render a trailing `<br>`, and `read_dom_changes` detects text typed into a
+  previously-empty block, so the new paragraph from Enter is editable.
+- **Toolbar/search no longer steals focus.** The adapters only re-sync the DOM
+  selection while the editor is focused, so refreshing decorations from an
+  outside control (e.g. a search box) doesn't yank the caret back into the
+  editor after each keystroke.
+
+### Known issues
+
+- Applying a mark or block type to a multi-word selection can occasionally
+  leave the last word(s) unformatted (an intermittent selection-boundary
+  mapping issue). Tracked for a follow-up.
 
 ## [0.4.0] - 2026-05-26
 
@@ -414,7 +447,8 @@ WYSIWYG editor with a Leptos adapter, no JavaScript dependency at runtime.
     caret are reflected visually. Both directions guard against echo
     loops via an `applying_selection` flag.
 
-[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/juanma-dev/taino-edit/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.4.0
 [0.3.1]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.1
 [0.3.0]: https://github.com/juanma-dev/taino-edit/releases/tag/v0.3.0
