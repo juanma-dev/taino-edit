@@ -4,6 +4,9 @@
 //! full `Mod-…` keymap wired on `keydown`, and a live JSON + HTML preview
 //! of the doc. Build with `trunk serve` in this directory.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use leptos::ev::{KeyboardEvent, MouseEvent};
 use leptos::prelude::*;
 use taino_edit_extensions::{
@@ -15,9 +18,58 @@ use taino_edit_extensions::{
     CodeBlock, Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
 };
 use taino_edit_leptos::{
-    set_block_type, toggle_mark, wrap_in, Attrs, Command, EditorState, KeyPress, Keymap, NodeSpec,
-    SchemaBuilder, Selection, TainoEditor, Transaction,
+    set_block_type, toggle_mark, wrap_in, Attrs, Command, Decoration, EditorState, EditorView,
+    KeyPress, Keymap, Node, NodeSpec, SchemaBuilder, Selection, TainoEditor, Transaction,
+    ViewPlugin,
 };
+
+/// A demo [`ViewPlugin`] that highlights every (case-insensitive) occurrence
+/// of a search query with an inline decoration. The query is shared with the
+/// search box; changing it + nudging the state signal re-runs `decorations`.
+#[derive(Default)]
+struct SearchHighlight {
+    query: Rc<RefCell<String>>,
+}
+
+impl ViewPlugin for SearchHighlight {
+    fn decorations(&self, view: &EditorView, _sel: Option<Selection>) -> Vec<Decoration> {
+        let q: Vec<char> = self.query.borrow().chars().collect();
+        if q.is_empty() {
+            return Vec::new();
+        }
+        let mut ranges = Vec::new();
+        collect_matches(view.doc(), 0, &q, &mut ranges);
+        ranges
+            .into_iter()
+            .map(|(from, to)| Decoration::inline(from, to, "taino-search-hit"))
+            .collect()
+    }
+}
+
+/// Walk `parent`'s content in document order (mirroring the editor's position
+/// model: a child element's content starts at `pos + 1`), pushing the doc
+/// position range of every non-overlapping, ASCII-case-insensitive match of
+/// `query` found in a text node.
+fn collect_matches(parent: &Node, base: usize, query: &[char], out: &mut Vec<(usize, usize)>) {
+    let mut pos = base;
+    for child in parent.content().iter() {
+        if child.is_text() {
+            let chars: Vec<char> = child.text().unwrap_or("").chars().collect();
+            let mut i = 0;
+            while i + query.len() <= chars.len() {
+                if (0..query.len()).all(|k| chars[i + k].eq_ignore_ascii_case(&query[k])) {
+                    out.push((pos + i, pos + i + query.len()));
+                    i += query.len();
+                } else {
+                    i += 1;
+                }
+            }
+        } else {
+            collect_matches(child, pos + 1, query, out);
+        }
+        pos += child.node_size();
+    }
+}
 
 fn main() {
     leptos::mount::mount_to_body(App);
@@ -80,6 +132,22 @@ fn App() -> impl IntoView {
         .node("doc", Default::default(), vec![h, p], vec![])
         .unwrap();
     let state = RwSignal::new(EditorState::new(doc, schema.clone()));
+
+    // ------- search highlight (inline decorations) ------------------------
+    // The query cell is shared between the `SearchHighlight` plugin (moved
+    // into the view) and the search box. `!Send`, so the box's handle lives
+    // in a `LocalStorage` slot.
+    let search_query = Rc::new(RefCell::new(String::new()));
+    let search_for_plugin = search_query.clone();
+    let search_holder: StoredValue<Rc<RefCell<String>>, LocalStorage> =
+        StoredValue::new_local(search_query);
+    let on_search = move |ev: leptos::ev::Event| {
+        let value = event_target_value(&ev);
+        search_holder.with_value(|q| *q.borrow_mut() = value);
+        // Nudge the signal so `<TainoEditor>` re-runs its effect and refreshes
+        // decorations — the query lives outside the document.
+        state.update(|_| {});
+    };
 
     // ------- keymap (kept in local storage because it's !Send) ------------
     let keymap_holder: StoredValue<Keymap, LocalStorage> =
@@ -293,10 +361,24 @@ fn App() -> impl IntoView {
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(table_del_slot)>"Delete table"</button>
             </div>
 
+            <div role="search" style="display:flex; gap:.4rem; margin-bottom:.5rem; align-items:center;">
+                <strong style="font-size:.8rem; color:#555;">"Search:"</strong>
+                <input
+                    type="search"
+                    placeholder="highlight matches…"
+                    on:input=on_search
+                    style="padding:.2rem .4rem; border:1px solid #ccc; border-radius:4px;"
+                />
+                <span style="font-size:.8rem; color:#888;">"(inline-decoration overlay)"</span>
+            </div>
+
             <div on:keydown=on_keydown>
                 <TainoEditor
                     state=state
-                    plugins=vec![Box::new(taino_edit_table_view::TableView::new()) as Box<dyn taino_edit_leptos::ViewPlugin>]
+                    plugins=vec![
+                        Box::new(taino_edit_table_view::TableView::new()) as Box<dyn ViewPlugin>,
+                        Box::new(SearchHighlight { query: search_for_plugin }) as Box<dyn ViewPlugin>,
+                    ]
                 />
             </div>
 

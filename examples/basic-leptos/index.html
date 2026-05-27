@@ -40,6 +40,14 @@
       .taino-editor .taino-cell-selected {
         background: #cfe3ff;
       }
+      /* Inline-decoration overlay: search-hit boxes drawn above the text.
+         `mix-blend-mode: multiply` tints the text like a highlighter instead
+         of covering it (yellow×white = yellow, yellow×black-text = black). */
+      .taino-deco-layer .taino-search-hit {
+        background: #fde68a;
+        mix-blend-mode: multiply;
+        border-radius: 2px;
+      }
       .taino-editor code {
         background: #f0f2f4;
         padding: 0.1em 0.35em;

@@ -207,9 +207,15 @@ impl EditorView {
                 apply_decoration(&self.children, d, true);
             }
         }
-        // Inline decorations: redraw the overlay layer from scratch.
-        self.render_inline_overlay(&decorations);
         self.decorations = decorations;
+        // Inline decorations: create the overlay layer only when needed, then
+        // (re)paint it from the current decoration set.
+        let any_inline = self
+            .decorations
+            .iter()
+            .any(|d| matches!(d, Decoration::Inline { .. }));
+        let _ = self.ensure_overlay(any_inline);
+        self.paint_inline_overlay();
     }
 
     /// The decorations currently applied.
@@ -217,28 +223,31 @@ impl EditorView {
         &self.decorations
     }
 
-    /// Redraw the inline-decoration overlay from `decorations`. Each inline
-    /// range becomes one box per client rect (so a range spanning lines draws
-    /// several boxes), positioned over the text it covers. The overlay is a
-    /// sibling of `root`, so it never alters the editable DOM — typing and the
-    /// diff/patch read-back are unaffected.
+    /// Recompute the inline-decoration overlay against the *current* layout.
     ///
-    /// Boxes are recomputed on every state change (adapters call
-    /// [`refresh_view_decorations`](Self::refresh_view_decorations) after each
-    /// update); they are *not* re-positioned on scroll/resize alone.
-    fn render_inline_overlay(&mut self, decorations: &[Decoration]) {
-        let any_inline = decorations
-            .iter()
-            .any(|d| matches!(d, Decoration::Inline { .. }));
+    /// The boxes are positioned from live client rects, so they only stay
+    /// aligned with the text while the layout is unchanged. Adapters wire this
+    /// to `scroll` (capture) and `resize` so highlights track the text when
+    /// the geometry shifts without a document edit. A no-op when there is no
+    /// overlay (i.e. no inline decorations).
+    pub fn reposition_inline_decorations(&self) {
+        self.paint_inline_overlay();
+    }
 
-        // Don't create an overlay just to leave it empty.
-        let Some(layer) = self.ensure_overlay(any_inline) else {
+    /// Clear and redraw the overlay boxes for the current inline decorations.
+    /// Each inline range becomes one box per client rect (so a range spanning
+    /// lines draws several boxes), positioned over the text it covers. The
+    /// overlay is a sibling of `root`, so this never alters the editable DOM —
+    /// typing and the diff/patch read-back are unaffected.
+    ///
+    /// Takes `&self`: it mutates the overlay element + document DOM (both
+    /// interior-mutable handles) but no view field, so `scroll`/`resize`
+    /// handlers can call it through a shared reference.
+    fn paint_inline_overlay(&self) {
+        let Some(layer) = &self.overlay else {
             return;
         };
         layer.set_inner_html("");
-        if !any_inline {
-            return;
-        }
         let Some(document) = self.root.owner_document() else {
             return;
         };
@@ -246,7 +255,7 @@ impl EditorView {
         // rect gives that origin in viewport coordinates, so each box can be
         // placed relative to it regardless of the positioning context.
         let origin = layer.get_bounding_client_rect();
-        for d in decorations {
+        for d in &self.decorations {
             let Decoration::Inline { from, to, class } = d else {
                 continue;
             };
@@ -467,21 +476,40 @@ impl EditorView {
                 }
             }
         });
-        let (pos, old_len, new_text, prev_text_node) = found?;
-        let mut transform = Transform::new(self.doc.clone());
-        let replacement = if new_text.is_empty() {
-            Slice::empty()
-        } else {
-            let new_node = self
-                .schema
-                .text(&new_text, prev_text_node.marks().to_vec())
+        if let Some((pos, old_len, new_text, prev_text_node)) = found {
+            let mut transform = Transform::new(self.doc.clone());
+            let replacement = if new_text.is_empty() {
+                Slice::empty()
+            } else {
+                let new_node = self
+                    .schema
+                    .text(&new_text, prev_text_node.marks().to_vec())
+                    .ok()?;
+                Slice::new(Fragment::from_node(new_node), 0, 0)
+            };
+            transform
+                .replace(pos, pos + old_len, replacement, &self.schema)
                 .ok()?;
-            Slice::new(Fragment::from_node(new_node), 0, 0)
-        };
-        transform
-            .replace(pos, pos + old_len, replacement, &self.schema)
-            .ok()?;
-        Some(transform)
+            return Some(transform);
+        }
+
+        // No existing text run changed. Detect text the browser inserted into a
+        // previously-empty textblock (no text descriptor exists to diff), e.g.
+        // typing into the new paragraph created by pressing Enter.
+        if let Some((pos, text)) = find_empty_block_text(&self.children, 0) {
+            let new_node = self.schema.text(&text, vec![]).ok()?;
+            let mut transform = Transform::new(self.doc.clone());
+            transform
+                .replace(
+                    pos,
+                    pos,
+                    Slice::new(Fragment::from_node(new_node), 0, 0),
+                    &self.schema,
+                )
+                .ok()?;
+            return Some(transform);
+        }
+        None
     }
 
     /// The currently-selected document range (or, when the selection lies
@@ -610,6 +638,11 @@ fn render(node: &Node, document: &Document) -> ViewDesc {
         children.push(cd);
     }
 
+    // An empty textblock needs a trailing <br> to be focusable / typable.
+    if children.is_empty() && is_textblock(node) {
+        append_trailing_break(document, &dom_el);
+    }
+
     ViewDesc::Element {
         node: node.clone(),
         dom: dom_el,
@@ -637,6 +670,95 @@ fn render_text(node: &Node, document: &Document) -> ViewDesc {
         text: text_node,
         wrapper,
     }
+}
+
+/// Marker attribute on the synthetic trailing `<br>` we add to empty
+/// textblocks so the caret can land in them (a bare `<p></p>` is zero-height
+/// and unfocusable in `contenteditable`). Lets us find/remove only *our* break
+/// and skip it when reading text back.
+const TRAILING_BREAK_ATTR: &str = "data-taino-trailing-break";
+
+/// A block node that holds inline content (paragraph, heading, code block, …)
+/// — the nodes that need a trailing break when empty. Block *containers*
+/// (doc, blockquote, list item, table cell) hold other blocks and never sit
+/// empty in practice, so the simple `block && !leaf` test is enough.
+fn is_textblock(node: &Node) -> bool {
+    node.is_block() && !node.is_leaf()
+}
+
+/// Append a synthetic trailing `<br>` to `el`.
+fn append_trailing_break(document: &Document, el: &Element) {
+    if let Ok(br) = document.create_element("br") {
+        let _ = br.set_attribute(TRAILING_BREAK_ATTR, "");
+        let _ = el.append_child(&br);
+    }
+}
+
+/// Add our trailing break when `empty` and missing; remove it when not empty.
+fn reconcile_trailing_break(document: &Document, el: &Element, empty: bool) {
+    let existing = el
+        .query_selector(&format!("br[{TRAILING_BREAK_ATTR}]"))
+        .ok()
+        .flatten();
+    match (empty, existing) {
+        (true, None) => append_trailing_break(document, el),
+        (false, Some(br)) => {
+            if let Some(parent) = br.parent_node() {
+                let _ = parent.remove_child(&br);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Concatenated data of `el`'s direct child *text* nodes (ignoring element
+/// children such as the trailing `<br>`). Used to detect text the browser
+/// inserted into a previously-empty textblock.
+fn direct_text(el: &Element) -> String {
+    let kids = el.child_nodes();
+    let mut s = String::new();
+    for i in 0..kids.length() {
+        if let Some(n) = kids.item(i) {
+            if n.node_type() == web_sys::Node::TEXT_NODE {
+                if let Some(d) = n.text_content() {
+                    s.push_str(&d);
+                }
+            }
+        }
+    }
+    s
+}
+
+/// Find the first empty textblock whose DOM has gained text (the browser
+/// inserting a character into a previously-empty block), returning the
+/// document position just inside it and the typed text. Walks in document
+/// order, mirroring [`collect_text_changes`]' position model.
+fn find_empty_block_text(descs: &[ViewDesc], base: usize) -> Option<(usize, String)> {
+    let mut pos = base;
+    for d in descs {
+        match d {
+            ViewDesc::Text { node, .. } => pos += node.node_size(),
+            ViewDesc::Element {
+                node,
+                dom,
+                children,
+            } => {
+                let content_start = pos + 1;
+                if children.is_empty() {
+                    if is_textblock(node) {
+                        let txt = direct_text(dom);
+                        if !txt.is_empty() {
+                            return Some((content_start, txt));
+                        }
+                    }
+                } else if let Some(found) = find_empty_block_text(children, content_start) {
+                    return Some(found);
+                }
+                pos += node.node_size();
+            }
+        }
+    }
+    None
 }
 
 /// Materialize a [`DomSpec`] into a `web_sys::Element` (tag + attrs).
@@ -824,8 +946,22 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             if new.is_text() || node.node_type() != new.node_type() || node.attrs() != new.attrs() {
                 return None;
             }
+            // If the old view had no children, the DOM may carry foreign nodes:
+            // our trailing <br>, or text the browser typed into a previously
+            // empty block that the read-back just folded into the model. Clear
+            // them so `patch_children` rebuilds from the model without
+            // duplicating content.
+            if children.is_empty() {
+                while let Some(c) = dom.first_child() {
+                    let _ = dom.remove_child(&c);
+                }
+            }
             let new_kids: Vec<Node> = new.content().iter().cloned().collect();
             let new_children = patch_children(document, dom, children, &new_kids);
+            // Keep the empty-textblock trailing break in sync.
+            if is_textblock(new) {
+                reconcile_trailing_break(document, dom, new_children.is_empty());
+            }
             Some(ViewDesc::Element {
                 node: new.clone(),
                 dom: dom.clone(),

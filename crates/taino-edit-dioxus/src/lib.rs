@@ -122,7 +122,9 @@ pub fn TainoEditor(
         let snapshot = state.read().clone();
         if let Some(rt) = runtime.write().as_mut() {
             rt.view.update(snapshot.doc().clone());
-            if rt.view.read_selection() != Some(snapshot.selection()) {
+            // Only re-sync the DOM selection when the editor is focused, so we
+            // never steal focus back from another element (e.g. a search box).
+            if rt.view.has_focus() && rt.view.read_selection() != Some(snapshot.selection()) {
                 rt.applying_selection.set(true);
                 let _ = rt.view.set_selection(snapshot.selection());
                 rt.applying_selection.set(false);
@@ -178,13 +180,18 @@ struct EventCloser {
     event: &'static str,
     target: web_sys::EventTarget,
     closure: Closure<dyn FnMut(web_sys::Event)>,
+    /// Whether the listener was registered in the capture phase (must match on
+    /// removal). Used for `scroll`, which does not bubble.
+    capture: bool,
 }
 
 impl Drop for EventCloser {
     fn drop(&mut self) {
-        let _ = self
-            .target
-            .remove_event_listener_with_callback(self.event, self.closure.as_ref().unchecked_ref());
+        let _ = self.target.remove_event_listener_with_callback_and_bool(
+            self.event,
+            self.closure.as_ref().unchecked_ref(),
+            self.capture,
+        );
     }
 }
 
@@ -194,14 +201,25 @@ fn push_listener(
     event: &'static str,
     closure: Closure<dyn FnMut(web_sys::Event)>,
 ) {
+    push_listener_capture(closers, target, event, closure, false);
+}
+
+fn push_listener_capture(
+    closers: &mut Vec<EventCloser>,
+    target: web_sys::EventTarget,
+    event: &'static str,
+    closure: Closure<dyn FnMut(web_sys::Event)>,
+    capture: bool,
+) {
     if target
-        .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
+        .add_event_listener_with_callback_and_bool(event, closure.as_ref().unchecked_ref(), capture)
         .is_ok()
     {
         closers.push(EventCloser {
             event,
             target,
             closure,
+            capture,
         });
     }
 }
@@ -312,6 +330,21 @@ fn wire_events(
             s.set(next);
         });
         push_listener(&mut closers, doc_target, "selectionchange", cb);
+    }
+
+    // Reposition inline-decoration overlays when the layout shifts without a
+    // document edit. `scroll` is captured (it doesn't bubble) so editor- or
+    // ancestor-level scrolling is caught too; `resize` fires on `window`.
+    if let Some(window) = web_sys::window() {
+        let win_target: web_sys::EventTarget = window.unchecked_into();
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            with_view(runtime, |v| v.reposition_inline_decorations());
+        });
+        push_listener_capture(&mut closers, win_target.clone(), "scroll", cb, true);
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+            with_view(runtime, |v| v.reposition_inline_decorations());
+        });
+        push_listener(&mut closers, win_target, "resize", cb);
     }
 
     closers

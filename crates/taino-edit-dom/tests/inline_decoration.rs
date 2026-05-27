@@ -207,6 +207,109 @@ fn inline_decorations_flow_through_a_view_plugin() {
 }
 
 #[wasm_bindgen_test]
+fn reposition_tracks_scroll() {
+    // A short, scrollable host with enough content to overflow.
+    let s = schema();
+    let mut paras = Vec::new();
+    for _ in 0..12 {
+        paras.push(para(&s, "line of text"));
+    }
+    let (mut view, host) = mount_in_host(doc(&s, paras), s);
+    let _ = host.set_attribute("style", "height:40px;overflow:auto");
+
+    // Decorate the first paragraph's text ("line of text" = positions 1..13).
+    view.set_decorations(vec![Decoration::inline(1, 13, "hl")]);
+    let box0: Element = overlay(&host)
+        .unwrap()
+        .query_selector(".hl")
+        .unwrap()
+        .expect("a highlight box")
+        .dyn_into()
+        .unwrap();
+    let top_before = box0.get_bounding_client_rect().top();
+
+    // Scroll the content up; the box is now stale until we reposition.
+    host.set_scroll_top(20);
+    view.reposition_inline_decorations();
+
+    let box1: Element = overlay(&host)
+        .unwrap()
+        .query_selector(".hl")
+        .unwrap()
+        .expect("a highlight box after reposition")
+        .dyn_into()
+        .unwrap();
+    let top_after = box1.get_bounding_client_rect().top();
+
+    // The decorated text scrolled up by ~20px, so the repainted box follows.
+    let moved = top_before - top_after;
+    assert!(
+        (moved - 20.0).abs() <= 2.0,
+        "box should track the 20px scroll, moved {moved}px"
+    );
+
+    let _ = host.parent_element().map(|b| b.remove_child(&host));
+}
+
+/// A search-highlight plugin like the `basic-leptos` demo: it scans the doc
+/// text for a query and emits one inline decoration per occurrence.
+struct SearchHits {
+    query: &'static str,
+}
+
+impl ViewPlugin for SearchHits {
+    fn decorations(&self, view: &EditorView, _sel: Option<Selection>) -> Vec<Decoration> {
+        let q: Vec<char> = self.query.chars().collect();
+        let mut ranges = Vec::new();
+        scan(view.doc(), 0, &q, &mut ranges);
+        ranges
+            .into_iter()
+            .map(|(f, t)| Decoration::inline(f, t, "hit"))
+            .collect()
+    }
+}
+
+fn scan(parent: &Node, base: usize, q: &[char], out: &mut Vec<(usize, usize)>) {
+    let mut pos = base;
+    for child in parent.content().iter() {
+        if child.is_text() {
+            let chars: Vec<char> = child.text().unwrap_or("").chars().collect();
+            let mut i = 0;
+            while !q.is_empty() && i + q.len() <= chars.len() {
+                if chars[i..i + q.len()] == *q {
+                    out.push((pos + i, pos + i + q.len()));
+                    i += q.len();
+                } else {
+                    i += 1;
+                }
+            }
+        } else {
+            scan(child, pos + 1, q, out);
+        }
+        pos += child.node_size();
+    }
+}
+
+#[wasm_bindgen_test]
+fn search_plugin_highlights_each_occurrence() {
+    let s = schema();
+    let (mut view, host) =
+        mount_in_host(doc(&s, vec![para(&s, "the cat"), para(&s, "the dog")]), s);
+
+    view.set_view_plugins(vec![Box::new(SearchHits { query: "the" })]);
+    view.refresh_view_decorations(None);
+
+    let boxes = overlay(&host).unwrap().query_selector_all(".hit").unwrap();
+    assert_eq!(
+        boxes.length(),
+        2,
+        "one highlight per 'the' occurrence (one per paragraph)"
+    );
+
+    let _ = host.parent_element().map(|b| b.remove_child(&host));
+}
+
+#[wasm_bindgen_test]
 fn node_and_inline_decorations_coexist() {
     let s = schema();
     let (mut view, host) = mount_in_host(doc(&s, vec![para(&s, "Hello world")]), s);
