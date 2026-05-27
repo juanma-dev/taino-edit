@@ -108,6 +108,7 @@ impl Extension for Lists {
             ("Mod-Shift-7".to_string(), wrap_in_ordered_list()),
             ("Tab".to_string(), sink_list_item()),
             ("Shift-Tab".to_string(), lift_list_item()),
+            ("Backspace".to_string(), backspace_in_list()),
             // Smart Enter must outrank the base keymap's `split_block`.
             // `chain` short-circuits: if the caret isn't inside a list
             // item, `smart_enter_in_list` reports false and the next
@@ -202,6 +203,31 @@ fn nearest_list_item(rp: &ResolvedPos) -> Option<(usize, String)> {
         }
     }
     None
+}
+
+/// Backspace at the very start of a list item's first block lifts that item
+/// out of the list (un-bullets it). Anywhere else it reports `false`, so the
+/// base keymap's Backspace (delete-char / join) handles the normal cases.
+pub fn backspace_in_list() -> Command {
+    Box::new(|state, dispatch| {
+        let sel = state.selection();
+        if !sel.is_empty() {
+            return false;
+        }
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), sel.from()) else {
+            return false;
+        };
+        if rp.parent_offset() != 0 {
+            return false; // not at the start of the textblock
+        }
+        let Some((li_depth, _)) = nearest_list_item(&rp) else {
+            return false;
+        };
+        if rp.index(li_depth) != 0 {
+            return false; // not the item's first block — let join handle it
+        }
+        lift_list_item()(state, dispatch)
+    })
 }
 
 /// Lift the enclosing list_item out of its list. For a single-item list

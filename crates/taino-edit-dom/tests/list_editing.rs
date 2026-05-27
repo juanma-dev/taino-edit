@@ -5,9 +5,12 @@
 
 #![cfg(target_arch = "wasm32")]
 
+use taino_edit_core::KeyPress;
 use taino_edit_core::{Command, EditorState, Node, NodeSpec, Schema, SchemaBuilder, Selection};
 use taino_edit_dom::EditorView;
-use taino_edit_extensions::{build_schema_with, smart_enter_in_list, Lists, Paragraph};
+use taino_edit_extensions::{
+    build_keymap_with, build_schema_with, smart_enter_in_list, Lists, Paragraph,
+};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 use web_sys::{Element, Text};
@@ -83,6 +86,96 @@ fn run(st: EditorState, cmd: &Command) -> EditorState {
 fn sync(view: &mut EditorView, st: &EditorState) {
     view.update(st.doc().clone());
     let _ = view.set_selection(st.selection());
+}
+
+/// Run a key through the full (chained) keymap, like the demo's on_keydown.
+fn press(st: EditorState, s: &Schema, key: &KeyPress) -> EditorState {
+    let keymap = build_keymap_with(&[&Paragraph, &Lists], s, false);
+    let mut next = None;
+    {
+        let mut d = |tx| next = Some(st.apply(tx));
+        keymap.handle(&st, key, Some(&mut d));
+    }
+    next.unwrap_or(st)
+}
+
+fn caret(st: EditorState, pos: usize) -> EditorState {
+    let mut t = st.tr();
+    t.set_selection(Selection::caret(pos));
+    st.apply(t)
+}
+
+#[wasm_bindgen_test]
+fn enter_on_empty_item_exits_the_list() {
+    let s = schema();
+    // List with one item "ab"; caret at end (pos 5).
+    let st = caret(EditorState::new(list_doc(&s, &["ab"]), s.clone()), 5);
+    let (mut view, root) = attach(st.doc().clone(), s.clone());
+    view.set_selection(st.selection()).ok();
+
+    let enter = KeyPress::key("Enter");
+    // Enter 1: split → empty trailing item.
+    let st = press(st, &s, &enter);
+    sync(&mut view, &st);
+    assert_eq!(
+        st.doc().child(0).child_count(),
+        2,
+        "two items after first Enter"
+    );
+
+    // Enter 2 on the empty item: exit the list.
+    let st = press(st, &s, &enter);
+    sync(&mut view, &st);
+
+    // The empty item left the list; "ab" stays listed, a paragraph follows.
+    let doc = st.doc();
+    assert_eq!(doc.child(0).node_type().name(), "bullet_list");
+    assert_eq!(
+        doc.child(0).child_count(),
+        1,
+        "only 'ab' remains in the list"
+    );
+    assert!(
+        doc.child_count() >= 2 && doc.child(1).node_type().name() == "paragraph",
+        "an empty paragraph should follow the list: {:?}",
+        doc.to_json()
+    );
+    // No corruption: text is intact and the DOM matches.
+    assert_eq!(doc.text_content(), "ab");
+    assert!(root.query_selector("p").unwrap().is_some());
+    cleanup(&root);
+}
+
+#[wasm_bindgen_test]
+fn backspace_at_start_of_list_item_lifts_it_out() {
+    let s = schema();
+    // Two items; caret at the START of the second item's text (pos 8).
+    // Positions: ul@0, li1[1..7] (p"ab" [2..6]), li2@7, p2 content start 9...
+    // wait: li1 size = p("ab")=4 +2 = 6 -> [1,7); li2@7, p2@8 content@9.
+    let st = caret(EditorState::new(list_doc(&s, &["ab", "cd"]), s.clone()), 9);
+    let (mut view, root) = attach(st.doc().clone(), s.clone());
+    view.set_selection(st.selection()).ok();
+
+    let st = press(st, &s, &KeyPress::key("Backspace"));
+    sync(&mut view, &st);
+
+    // Backspace at the start of a list item should lift it out of the list
+    // (not delete a character, not corrupt). "cd" becomes a paragraph after
+    // a one-item list of "ab".
+    let doc = st.doc();
+    assert_eq!(
+        doc.text_content(),
+        "abcd",
+        "no characters lost: {:?}",
+        doc.to_json()
+    );
+    assert_eq!(
+        doc.child(0).child_count(),
+        1,
+        "first item stays in the list: {:?}",
+        doc.to_json()
+    );
+    cleanup(&root);
 }
 
 #[wasm_bindgen_test]

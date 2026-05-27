@@ -48,8 +48,8 @@ pub use image::{insert_image, Image};
 pub use italic::Italic;
 pub use link::{remove_link, set_link, Link};
 pub use lists::{
-    lift_list_item, sink_list_item, smart_enter_in_list, split_list_item, wrap_in_bullet_list,
-    wrap_in_ordered_list, Lists,
+    backspace_in_list, lift_list_item, sink_list_item, smart_enter_in_list, split_list_item,
+    wrap_in_bullet_list, wrap_in_ordered_list, Lists,
 };
 pub use paragraph::Paragraph;
 pub use table::{

@@ -2,8 +2,9 @@
 
 use taino_edit_core::{Command, EditorState, KeyPress, NodeSpec, Schema, SchemaBuilder, Selection};
 use taino_edit_extensions::{
-    build_keymap_with, build_schema_with, lift_list_item, sink_list_item, smart_enter_in_list,
-    split_list_item, wrap_in_bullet_list, wrap_in_ordered_list, Extension, Lists, Paragraph,
+    backspace_in_list, build_keymap_with, build_schema_with, lift_list_item, sink_list_item,
+    smart_enter_in_list, split_list_item, wrap_in_bullet_list, wrap_in_ordered_list, Extension,
+    Lists, Paragraph,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -51,7 +52,7 @@ fn state_with_paragraph(text: &str) -> EditorState {
 }
 
 #[test]
-fn lists_registers_three_nodes_and_five_bindings() {
+fn lists_registers_three_nodes_and_six_bindings() {
     let adds = Lists.schema_additions();
     let names: Vec<&str> = adds.nodes.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(names, vec!["list_item", "bullet_list", "ordered_list"]);
@@ -61,7 +62,14 @@ fn lists_registers_three_nodes_and_five_bindings() {
     let keys: Vec<&str> = bindings.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(
         keys,
-        vec!["Mod-Shift-8", "Mod-Shift-7", "Tab", "Shift-Tab", "Enter"]
+        vec![
+            "Mod-Shift-8",
+            "Mod-Shift-7",
+            "Tab",
+            "Shift-Tab",
+            "Backspace",
+            "Enter"
+        ]
     );
 }
 
@@ -108,6 +116,36 @@ fn wrap_in_list_gathers_all_selected_paragraphs_into_one_list() {
     assert!(
         html.contains("<ul><li><p>a</p></li><li><p>b</p></li></ul>"),
         "both paragraphs should become items of one list, got: {html}"
+    );
+}
+
+#[test]
+fn backspace_in_list_only_applies_at_an_item_start() {
+    // A bullet item "ab" with the caret mid-text: backspace_in_list must not
+    // apply (so the base Backspace deletes a character instead).
+    let s = state_with_paragraph("ab");
+    let s = run(s, &wrap_in_bullet_list());
+    let mut t = s.tr();
+    t.set_selection(Selection::caret(4)); // between 'a' and 'b' inside the item
+    let s = s.apply(t);
+    assert!(
+        !backspace_in_list()(&s, None),
+        "mid-text Backspace must fall through to the base delete command"
+    );
+
+    // Caret at the very start of the item's text (pos 3): it lifts the item.
+    let mut t = s.tr();
+    t.set_selection(Selection::caret(3));
+    let s = s.apply(t);
+    assert!(
+        backspace_in_list()(&s, None),
+        "start-of-item Backspace lifts"
+    );
+    let s = run(s, &backspace_in_list());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("<p>ab</p>") && !html.contains("<ul>"),
+        "lifting the only item dissolves the list: {html}"
     );
 }
 
