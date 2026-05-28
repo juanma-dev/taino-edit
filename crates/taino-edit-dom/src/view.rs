@@ -474,7 +474,7 @@ impl EditorView {
                 let dom_data = text.data();
                 let doc_text = node.text().unwrap_or("");
                 if dom_data != doc_text {
-                    if let Some((offset, old_len, new_part)) = find_diff(&doc_text, &dom_data) {
+                    if let Some((offset, old_len, new_part)) = find_diff(doc_text, &dom_data) {
                         found = Some((doc_pos + offset, old_len, new_part, node.clone()));
                     }
                 }

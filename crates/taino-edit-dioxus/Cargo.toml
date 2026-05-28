@@ -29,6 +29,7 @@ features = [
     "Event",
     "EventTarget",
     "KeyboardEvent",
+    "KeyboardEventInit",
     "InputEvent",
     "CompositionEvent",
     "ClipboardEvent",

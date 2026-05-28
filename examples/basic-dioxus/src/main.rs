@@ -10,7 +10,7 @@
 
 use dioxus::prelude::*;
 use taino_edit_dioxus::{
-    set_block_type, toggle_mark, Attrs, Command, EditorState, KeyPress, NodeSpec, SchemaBuilder,
+    set_block_type, toggle_mark, Attrs, Command, EditorState, KeymapProp, NodeSpec, SchemaBuilder,
     TainoEditor, Transaction, ViewPlugins,
 };
 use taino_edit_extensions::{
@@ -90,16 +90,15 @@ fn App() -> Element {
         .node("doc", Default::default(), vec![h, p], vec![])
         .unwrap();
 
-    let schema_for_keymap = schema.clone();
-    let mut state = use_signal(|| EditorState::new(doc, schema));
-    // Keymap (Mod-b / Mod-i / Mod-Alt-0..3 / Mod-z / Mod-Shift-z). Built
-    // once; the closure re-creates the extension values locally so their
-    // borrows only need to live for the build call.
-    let keymap = use_signal(move || {
+    // Build the keymap once from the same extension set. `<TainoEditor>`
+    // owns `keydown` (synchronous, live-selection), so we just hand it the
+    // keymap via the `KeymapProp` wrapper.
+    let keymap = {
         let exts: Vec<&dyn taino_edit_extensions::Extension> =
             vec![&Paragraph, &Heading, &Bold, &Italic, &History, &Table];
-        build_keymap_with(&exts, &schema_for_keymap, /*mac=*/ false)
-    });
+        build_keymap_with(&exts, &schema, /*mac=*/ false)
+    };
+    let state = use_signal(|| EditorState::new(doc, schema));
 
     // Toolbar buttons run a command and keep editor focus (mousedown
     // preventDefault stops the button from stealing the selection).
@@ -116,33 +115,6 @@ fn App() -> Element {
     let on_merge_row = move |_| {
         run_cmd(state, select_cell_range((0, 0), (0, 2)));
         run_cmd(state, merge_cells());
-    };
-
-    let on_keydown = move |evt: KeyboardEvent| {
-        let mods = evt.modifiers();
-        let key = KeyPress {
-            key: evt.key().to_string(),
-            ctrl: mods.contains(Modifiers::CONTROL),
-            alt: mods.contains(Modifiers::ALT),
-            shift: mods.contains(Modifiers::SHIFT),
-            meta: mods.contains(Modifiers::META),
-        };
-        let snap = state.peek().clone();
-        let mut next = None;
-        let handled = {
-            let km = keymap.peek();
-            km.handle(
-                &snap,
-                &key,
-                Some(&mut |tx: Transaction| next = Some(snap.apply(tx))),
-            )
-        };
-        if let Some(n) = next {
-            state.set(n);
-        }
-        if handled {
-            evt.prevent_default();
-        }
     };
 
     rsx! {
@@ -239,12 +211,10 @@ fn App() -> Element {
                 }
             }
 
-            div {
-                onkeydown: on_keydown,
-                TainoEditor {
-                    state,
-                    plugins: ViewPlugins::new(vec![Box::new(TableView::new())]),
-                }
+            TainoEditor {
+                state,
+                keymap: KeymapProp::new(keymap),
+                plugins: ViewPlugins::new(vec![Box::new(TableView::new())]),
             }
 
             section {

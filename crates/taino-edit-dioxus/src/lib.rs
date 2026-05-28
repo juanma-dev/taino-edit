@@ -88,6 +88,42 @@ impl std::fmt::Debug for ViewPlugins {
     }
 }
 
+/// A take-once container for the [`TainoEditor`] `keymap` prop. Mirrors
+/// [`ViewPlugins`]: Dioxus props must be `Clone + PartialEq` and [`Keymap`] is
+/// neither, so the keymap lives behind a shared cell and is moved into the
+/// view at mount.
+///
+/// ```ignore
+/// rsx! { TainoEditor { state, keymap: KeymapProp::new(my_keymap) } }
+/// ```
+#[derive(Clone, Default)]
+pub struct KeymapProp(Rc<RefCell<Option<Keymap>>>);
+
+impl KeymapProp {
+    /// Wrap a keymap for the `keymap` prop.
+    pub fn new(keymap: Keymap) -> Self {
+        Self(Rc::new(RefCell::new(Some(keymap))))
+    }
+
+    /// Take the keymap out (once, at mount).
+    fn take(&self) -> Option<Keymap> {
+        self.0.borrow_mut().take()
+    }
+}
+
+impl PartialEq for KeymapProp {
+    // Mount-only; never re-read, so the prop never forces a re-render.
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for KeymapProp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeymapProp").finish_non_exhaustive()
+    }
+}
+
 /// A Dioxus component that renders an editor backed by a
 /// [`Signal<EditorState>`]. Whenever the signal changes, the mounted DOM is
 /// reconciled via [`EditorView::update`]; browser-side edits (typing, IME
@@ -112,6 +148,13 @@ pub fn TainoEditor(
     /// decorations on every state change.
     #[props(default)]
     plugins: ViewPlugins,
+    /// Optional [`Keymap`] for keyboard editing. When provided, the component
+    /// owns `keydown`: it reads the *live* DOM selection, runs the matching
+    /// command, and applies the result to the view **synchronously** (so the
+    /// caret and DOM never lag the model). Build it with
+    /// `taino_edit_extensions::build_keymap_with`.
+    #[props(default)]
+    keymap: KeymapProp,
 ) -> Element {
     // The mounted view + its event closures live here across renders.
     // EditorView is !Send + !Sync, which Dioxus signals tolerate.
@@ -148,11 +191,21 @@ pub fn TainoEditor(
         view.set_view_plugins(plugins.take());
         view.refresh_view_decorations(Some(snapshot.selection()));
         let applying = Rc::new(Cell::new(false));
-        let closures = wire_events(&element, runtime, state, applying.clone());
+        // Park the keymap behind a shared cell so the keydown closure (and
+        // the runtime, for diagnostics) can reach it.
+        let keymap_cell: Rc<RefCell<Option<Keymap>>> = Rc::new(RefCell::new(keymap.take()));
+        let closures = wire_events(
+            &element,
+            runtime,
+            state,
+            applying.clone(),
+            keymap_cell.clone(),
+        );
         runtime.set(Some(EditorRuntime {
             view,
             closures,
             applying_selection: applying,
+            keymap: keymap_cell,
         }));
     };
 
@@ -173,6 +226,10 @@ struct EditorRuntime {
     /// Set while the effect pushes state's selection into the DOM, so the
     /// `selectionchange` listener can ignore the resulting echo.
     applying_selection: Rc<Cell<bool>>,
+    /// The installed keymap (if any). Shared with the `keydown` closure so it
+    /// can run commands synchronously against the live state.
+    #[allow(dead_code)] // accessed via the keydown closure's clone of the Rc.
+    keymap: Rc<RefCell<Option<Keymap>>>,
 }
 
 /// A `Closure` registered on a DOM target; on drop the listener is removed.
@@ -226,9 +283,10 @@ fn push_listener_capture(
 
 fn wire_events(
     el: &web_sys::Element,
-    runtime: Signal<Option<EditorRuntime>>,
-    state: Signal<EditorState>,
+    mut runtime: Signal<Option<EditorRuntime>>,
+    mut state: Signal<EditorState>,
     applying_selection: Rc<Cell<bool>>,
+    keymap_cell: Rc<RefCell<Option<Keymap>>>,
 ) -> Vec<EventCloser> {
     let target: web_sys::EventTarget = el.clone().into();
     let mut closers: Vec<EventCloser> = Vec::new();
@@ -240,6 +298,59 @@ fn wire_events(
         }
     });
     push_listener(&mut closers, target.clone(), "input", cb);
+
+    // `keydown`: with a keymap installed, the editor owns keyboard editing.
+    // Read the *live* DOM selection so the command acts on the real caret,
+    // not a lagging model selection; then apply view.update + set_selection
+    // **synchronously** so the DOM/caret can't fall out of step before the
+    // next keystroke.
+    let km_for_keydown = keymap_cell;
+    let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
+        let Ok(kev) = ev.dyn_into::<web_sys::KeyboardEvent>() else {
+            return;
+        };
+        let key = KeyPress {
+            key: kev.key(),
+            ctrl: kev.ctrl_key(),
+            alt: kev.alt_key(),
+            shift: kev.shift_key(),
+            meta: kev.meta_key(),
+        };
+        let mut cur = state.peek().clone();
+        if let Some(Some(live)) = with_view(runtime, |v| v.read_selection()) {
+            if live != cur.selection() {
+                let mut tx = cur.tr();
+                tx.set_selection(live);
+                tx.no_history();
+                cur = cur.apply(tx);
+            }
+        }
+        let mut next = None;
+        let handled = match km_for_keydown.borrow().as_ref() {
+            Some(km) => {
+                let mut d = |t: Transaction| next = Some(cur.apply(t));
+                km.handle(&cur, &key, Some(&mut d))
+            }
+            None => false,
+        };
+        if let Some(n) = next {
+            // Apply synchronously to the mounted view, then publish to state.
+            if let Some(rt) = runtime.write().as_mut() {
+                rt.view.update(n.doc().clone());
+                rt.applying_selection.set(true);
+                let _ = rt.view.set_selection(n.selection());
+                rt.applying_selection.set(false);
+                rt.view.refresh_view_decorations(Some(n.selection()));
+            }
+            state.set(n);
+        }
+        // Structural keys are model-authoritative.
+        let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete");
+        if handled || structural {
+            kev.prevent_default();
+        }
+    });
+    push_listener(&mut closers, target.clone(), "keydown", cb);
 
     // IME composition: suspend reads while composing, commit on end.
     let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
