@@ -10,6 +10,7 @@ use crate::fragment::Fragment;
 use crate::mark::MarkType;
 use crate::node::Node;
 use crate::pos::ResolvedPos;
+use crate::schema::Schema;
 use crate::selection::Selection;
 use crate::slice::Slice;
 use crate::state::{EditorState, Transaction};
@@ -354,15 +355,64 @@ pub fn delete_forward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) 
     true
 }
 
-/// Collapse a range selection, or move an empty caret one position left.
+/// Whether `rp` sits inside a textblock — a block whose content allows
+/// inline (text) children. Only such positions are valid text carets; the
+/// boundaries *between* blocks (e.g. after a `</p>` but still inside a
+/// `<li>`) are not.
+fn pos_in_textblock(rp: &ResolvedPos, schema: &Schema) -> bool {
+    if rp.depth() == 0 {
+        return false;
+    }
+    let parent = rp.parent();
+    if !parent.node_type().is_block() {
+        return false;
+    }
+    let Some(text_type) = schema.node_type("text") else {
+        return false;
+    };
+    schema
+        .content_match(parent.node_type().id())
+        .match_type(text_type.id())
+        .is_some()
+}
+
+/// Scan outward from `from` (exclusive) in the given direction for the next
+/// position that is a valid text caret. Returns `None` at the document edge
+/// — so a caret already at the last text position of the document doesn't
+/// drift into a structural boundary.
+fn next_text_caret(doc: &Node, schema: &Schema, from: usize, forward: bool) -> Option<usize> {
+    let max = doc.content().size();
+    let mut p = from;
+    loop {
+        if forward {
+            if p >= max {
+                return None;
+            }
+            p += 1;
+        } else if p == 0 {
+            return None;
+        } else {
+            p -= 1;
+        }
+        if let Ok(rp) = ResolvedPos::resolve(doc, p) {
+            if pos_in_textblock(&rp, schema) {
+                return Some(p);
+            }
+        }
+    }
+}
+
+/// Collapse a range selection, or move an empty caret to the previous valid
+/// text position (skipping structural boundaries between blocks).
 pub fn caret_left(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
     let sel = state.selection();
     let target = if !sel.is_empty() {
         sel.from()
-    } else if sel.from() > 0 {
-        sel.from() - 1
     } else {
-        return false;
+        match next_text_caret(state.doc(), state.schema(), sel.from(), false) {
+            Some(p) => p,
+            None => return false,
+        }
     };
     if let Some(d) = dispatch {
         let mut tx = state.tr();
@@ -372,16 +422,17 @@ pub fn caret_left(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> b
     true
 }
 
-/// Collapse a range selection, or move an empty caret one position right.
+/// Collapse a range selection, or move an empty caret to the next valid text
+/// position (skipping structural boundaries between blocks).
 pub fn caret_right(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
     let sel = state.selection();
-    let max = state.doc().content().size();
     let target = if !sel.is_empty() {
         sel.to(state.doc())
-    } else if sel.from() < max {
-        sel.from() + 1
     } else {
-        return false;
+        match next_text_caret(state.doc(), state.schema(), sel.from(), true) {
+            Some(p) => p,
+            None => return false,
+        }
     };
     if let Some(d) = dispatch {
         let mut tx = state.tr();
@@ -423,6 +474,24 @@ pub fn caret_line_end(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) 
     true
 }
 
+fn find_last_textblock(node: &Node, start_pos: usize) -> Option<(Node, usize)> {
+    if node.is_text() {
+        return None;
+    }
+    if node.is_block() && (node.child_count() == 0 || node.child(0).is_inline()) {
+        return Some((node.clone(), start_pos));
+    }
+    let mut pos = start_pos + 1;
+    for i in 0..node.child_count() {
+        let child = node.child(i);
+        if i == node.child_count() - 1 {
+            return find_last_textblock(child, pos);
+        }
+        pos += child.node_size();
+    }
+    None
+}
+
 /// At the start of a block with a preceding sibling, join it onto that
 /// sibling (Backspace at block start).
 pub fn join_backward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -> bool {
@@ -437,6 +506,49 @@ pub fn join_backward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -
     if d == 0 || rp.parent_offset() != 0 || rp.index(d - 1) == 0 {
         return false;
     }
+
+    let parent = rp.node(d - 1);
+    let prev_idx = rp.index(d - 1) - 1;
+    let prev_sibling = parent.child(prev_idx);
+    let prev_sibling_start = rp.before(d) - prev_sibling.node_size();
+
+    // Check if the preceding sibling is a structural wrapper node that is not a textblock.
+    if prev_sibling.is_block() && (prev_sibling.child_count() > 0 && !prev_sibling.child(0).is_inline()) {
+        if let Some((last_p, last_p_start)) = find_last_textblock(prev_sibling, prev_sibling_start) {
+            let target_end = last_p_start + 1 + last_p.content().size();
+            let current_end = rp.after(d);
+            if let Some(disp) = dispatch {
+                let mut tx = state.tr();
+                let Ok(rp_last) = ResolvedPos::resolve(state.doc(), last_p_start + 1) else {
+                    return false;
+                };
+                let mut current_node = rp.node(d).clone();
+                for depth in (1..rp_last.depth()).rev() {
+                    let ancestor = rp_last.node(depth);
+                    let Ok(wrapped) = state.schema().create_node(
+                        ancestor.node_type().name(),
+                        ancestor.attrs().clone(),
+                        vec![current_node],
+                        ancestor.marks().to_vec(),
+                    ) else {
+                        return false;
+                    };
+                    current_node = wrapped;
+                }
+                let slice = Slice::new(Fragment::from_node(current_node), rp_last.depth(), 0);
+                if tx
+                    .transform()
+                    .replace(target_end, current_end, slice, state.schema())
+                    .is_ok()
+                {
+                    tx.set_selection(Selection::caret(target_end));
+                    disp(tx);
+                }
+            }
+            return true;
+        }
+    }
+
     let before = rp.before(d);
     if let Some(disp) = dispatch {
         let mut tx = state.tr();

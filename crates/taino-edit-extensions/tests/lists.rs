@@ -306,6 +306,28 @@ fn split_list_item_is_alias_of_smart_enter() {
 }
 
 #[test]
+fn enter_after_wrapping_creates_a_second_bullet() {
+    // Regression: wrapping a paragraph used to leave the caret on the list's
+    // outer boundary (after </ul>), where Enter made a sibling paragraph
+    // instead of a new bullet. The caret must stay inside the item's text.
+    let s = state_with_paragraph("Rust");
+    let s = {
+        let mut t = s.tr();
+        t.set_selection(Selection::caret(5)); // end of "Rust"
+        s.apply(t)
+    };
+    let s = run(s, &wrap_in_bullet_list());
+    assert!(s.doc().to_html().contains("<ul><li><p>Rust</p></li></ul>"));
+
+    let s = run(s, &smart_enter_in_list());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("<ul><li><p>Rust</p></li><li><p></p></li></ul>"),
+        "Enter after wrap should add a second bullet: {html}"
+    );
+}
+
+#[test]
 fn sink_list_item_nests_under_previous_sibling() {
     let s = schema();
     let li = |t: &str| {

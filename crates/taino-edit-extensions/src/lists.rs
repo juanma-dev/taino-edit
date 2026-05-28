@@ -172,6 +172,29 @@ fn wrap_in_list(list_name: &'static str) -> Command {
                 .replace(start, end, slice, state.schema())
                 .is_ok()
             {
+                // Keep the caret inside its text after wrapping: each block
+                // gains a `list_item` wrapper (+2) and the whole run gains a
+                // list wrapper (+1). A plain `replace` would otherwise collapse
+                // the interior caret onto the list's outer boundary — a
+                // non-textblock position where Enter can't make a new bullet.
+                let map_into_list = |p: usize| -> usize {
+                    for (bi, (_, b_start, b_end)) in blocks.iter().enumerate() {
+                        if p >= *b_start && p < *b_end {
+                            let preceding: usize = blocks[..bi]
+                                .iter()
+                                .map(|(b, _, _)| b.node_size() + 2)
+                                .sum();
+                            return start + 1 + preceding + 1 + (p - b_start);
+                        }
+                    }
+                    start + 3
+                };
+                let new_from = map_into_list(sel.from());
+                let new_to = map_into_list(sel.to(state.doc()));
+                tx.set_selection(Selection::Text {
+                    anchor: new_from,
+                    head: new_to,
+                });
                 d(tx);
             }
         }
@@ -263,6 +286,7 @@ pub fn lift_list_item() -> Command {
             list.content().children()[item_idx + 1..].to_vec();
 
         let mut replacement: Vec<taino_edit_core::Node> = Vec::new();
+        let mut before_list_size = 0;
         if !before_items.is_empty() {
             let Ok(n) = state.schema().create_node(
                 list.node_type().name(),
@@ -272,6 +296,7 @@ pub fn lift_list_item() -> Command {
             ) else {
                 return false;
             };
+            before_list_size = n.node_size();
             replacement.push(n);
         }
         replacement.extend(lifted);
@@ -297,6 +322,13 @@ pub fn lift_list_item() -> Command {
                 .replace(list_start, list_end, slice, state.schema())
                 .is_ok()
             {
+                let block_idx = rp.index(li_depth);
+                let before_blocks_size: usize = item.content().children()[..block_idx]
+                    .iter()
+                    .map(|n| n.node_size())
+                    .sum();
+                let new_pos = list_start + before_list_size + before_blocks_size + 1 + rp.parent_offset();
+                tx.set_selection(Selection::caret(new_pos));
                 d(tx);
             }
         }

@@ -474,7 +474,9 @@ impl EditorView {
                 let dom_data = text.data();
                 let doc_text = node.text().unwrap_or("");
                 if dom_data != doc_text {
-                    found = Some((doc_pos, doc_text.chars().count(), dom_data, node.clone()));
+                    if let Some((offset, old_len, new_part)) = find_diff(&doc_text, &dom_data) {
+                        found = Some((doc_pos + offset, old_len, new_part, node.clone()));
+                    }
                 }
             }
         });
@@ -954,7 +956,10 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             if !new.is_text() || !same_markup(node, new) {
                 return None;
             }
-            text.set_data(new.text().unwrap_or(""));
+            let val = new.text().unwrap_or("");
+            if text.data() != val {
+                text.set_data(val);
+            }
             Some(ViewDesc::Text {
                 node: new.clone(),
                 text: text.clone(),
@@ -994,4 +999,35 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             })
         }
     }
+}
+
+fn find_diff(a: &str, b: &str) -> Option<(usize, usize, String)> {
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+    let a_len = a_chars.len();
+    let b_len = b_chars.len();
+
+    let mut prefix_len = 0;
+    while prefix_len < a_len && prefix_len < b_len && a_chars[prefix_len] == b_chars[prefix_len] {
+        prefix_len += 1;
+    }
+
+    if prefix_len == a_len && prefix_len == b_len {
+        return None;
+    }
+
+    let mut suffix_len = 0;
+    while suffix_len < a_len - prefix_len
+        && suffix_len < b_len - prefix_len
+        && a_chars[a_len - 1 - suffix_len] == b_chars[b_len - 1 - suffix_len]
+    {
+        suffix_len += 1;
+    }
+
+    let old_start = prefix_len;
+    let old_end = a_len - suffix_len;
+    let new_end = b_len - suffix_len;
+
+    let new_part: String = b_chars[old_start..new_end].iter().collect();
+    Some((old_start, old_end - old_start, new_part))
 }
