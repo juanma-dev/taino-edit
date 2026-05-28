@@ -8,8 +8,23 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-27
+
 ### Fixed
 
+- **Enter at the end of a list made no new bullet.** Horizontal caret motion
+  (`caret_left` / `caret_right`) advanced by one raw position, so pressing the
+  arrow key at a textblock's edge parked the caret on a structural boundary
+  (e.g. inside a `<li>` but after its `</p>`) — a spot the browser can't render
+  a caret in, so it looked unchanged. `smart_enter_in_list` then saw a
+  non-textblock parent and split the wrong node, producing no list item. Caret
+  motion now skips to the nearest valid text position (and is a no-op at the
+  document's last one), and crossing a block boundary lands inside the adjacent
+  textblock.
+- **Wrapping a paragraph in a list dropped the caret outside it.** `wrap_in_*`
+  left the selection on the new list's trailing boundary (after `</ul>`), so
+  the first Enter after creating a list made a sibling paragraph instead of a
+  new bullet. The caret now stays inside the wrapped item's text.
 - **Caret drift inside nested content.** The DOM↔document position mapping
   didn't count an element's opening token when descending into a child, so a
   caret inside nested content (e.g. a list item's paragraph) drifted one
