@@ -278,9 +278,6 @@ pointer-interaction platform.
 - 🐛 Applying a mark/block type to a multi-word selection occasionally leaves
   the trailing word(s) unformatted — an intermittent selection-boundary
   mapping issue (reported during v0.5 manual testing). Next-up to investigate.
-- 🐛 Deleting a middle item from an ordered list restarts the numbering of
-  the following items from `1` instead of continuing the original sequence
-  (reported 2026-05-28 during Dioxus demo dog-fooding).
 - 🐛 Table cell operations only act on the first row and the first three
   columns: `merge_cells` (and likely the other table commands — split, add /
   delete row/column, header toggle) silently ignore cells outside that

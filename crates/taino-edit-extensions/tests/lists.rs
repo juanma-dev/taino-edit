@@ -209,6 +209,50 @@ fn lift_list_item_from_multi_item_list_keeps_siblings() {
 }
 
 #[test]
+fn lift_from_ordered_list_continues_numbering_in_the_after_list() {
+    // Regression: lifting a middle item from an ordered_list used to give
+    // the after-list start=1, so 1,2,3,4 → 1, [b], 1,2 in the rendered HTML.
+    // The fix lets the after-list resume counting (here it should start at 3).
+    let s = schema();
+    let li = |t: &str| {
+        s.create_node(
+            "list_item",
+            Default::default(),
+            vec![paragraph(&s, t)],
+            vec![],
+        )
+        .unwrap()
+    };
+    let list = s
+        .create_node(
+            "ordered_list",
+            Default::default(),
+            vec![li("a"), li("b"), li("c"), li("d")],
+            vec![],
+        )
+        .unwrap();
+    let doc = s
+        .node("doc", Default::default(), vec![list], vec![])
+        .unwrap();
+    let st = EditorState::new(doc, s.clone());
+    // Caret inside "b" (second list_item) — same offset as the bullet test.
+    let mut t = st.tr();
+    t.set_selection(Selection::caret(7));
+    let st = st.apply(t);
+
+    let st = run(st, &lift_list_item());
+    let html = st.doc().to_html();
+    // before-list stays at the default start=1 ("a" still renders as "1"),
+    // and the after-list resumes counting at 3 — *not* 1.
+    assert!(
+        html.contains(
+            "<ol><li><p>a</p></li></ol><p>b</p><ol start=\"3\"><li><p>c</p></li><li><p>d</p></li></ol>"
+        ),
+        "after-list must continue numbering at 3: {html}"
+    );
+}
+
+#[test]
 fn smart_enter_splits_list_item_into_two() {
     let s = schema();
     let li = s

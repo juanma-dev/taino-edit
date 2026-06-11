@@ -282,6 +282,7 @@ pub fn lift_list_item() -> Command {
         // lifted blocks, then any siblings after stay in another list.
         let before_items: Vec<taino_edit_core::Node> =
             list.content().children()[..item_idx].to_vec();
+        let before_items_count = before_items.len();
         let after_items: Vec<taino_edit_core::Node> =
             list.content().children()[item_idx + 1..].to_vec();
 
@@ -301,9 +302,25 @@ pub fn lift_list_item() -> Command {
         }
         replacement.extend(lifted);
         if !after_items.is_empty() {
+            // The after-list inherits the original list's attrs, except for
+            // `ordered_list.start`: continuing items must keep counting where
+            // the original sequence left off. With N items before the lifted
+            // one and the lifted item itself removed, the next visible number
+            // is `original_start + N + 1`. Anything else (e.g. bullet_list)
+            // keeps the parent's attrs unchanged.
+            let mut after_attrs = list.attrs().clone();
+            if list.node_type().name() == "ordered_list" {
+                let original_start = list
+                    .attrs()
+                    .get("start")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1);
+                let resumed = original_start + before_items_count as u64 + 1;
+                after_attrs.insert("start".to_string(), AttrValue::from(resumed));
+            }
             let Ok(n) = state.schema().create_node(
                 list.node_type().name(),
-                list.attrs().clone(),
+                after_attrs,
                 after_items,
                 list.marks().to_vec(),
             ) else {
