@@ -7,8 +7,9 @@ use taino_edit_core::{
 use taino_edit_extensions::{
     add_column_after, add_column_before, add_row_after, build_keymap_with, build_schema_with,
     delete_column, delete_row, delete_table, go_to_next_cell, go_to_prev_cell, insert_table,
-    merge_cells, select_cell_range, set_column_width, split_cell, toggle_header_cell,
-    toggle_header_column, toggle_header_row, Extension, Lists, Paragraph, Table,
+    merge_cells, select_caret_column, select_caret_row, select_cell_range, set_column_width,
+    split_cell, toggle_header_cell, toggle_header_column, toggle_header_row, Extension, Lists,
+    Paragraph, Table,
 };
 
 fn run(state: EditorState, cmd: &Command) -> EditorState {
@@ -351,6 +352,135 @@ fn merge_vertical_sets_rowspan() {
     assert!(
         html.contains("rowspan=\"2\""),
         "expected a rowspan=2 cell: {html}"
+    );
+}
+
+/// Place the caret inside the cell at logical `(row, col)` of the first
+/// table in `state` (assumes one table). Used by the caret-row/column tests
+/// below to drive `select_caret_*` from a chosen position.
+fn put_caret_in_cell(state: EditorState, row: usize, col: usize) -> EditorState {
+    use taino_edit_core::ResolvedPos;
+    let doc = state.doc().clone();
+    // Walk to the table and the cell at (row, col) by content order.
+    // Doc has exactly one table here, located after the placeholder paragraph
+    // ("<p>hi</p><table>…</table>"). The caret position we want is
+    // table_pos + sum-of-prior-cell-sizes + 1 (enter the cell).
+    // We compute this by re-using cell_at over a trial position: walk
+    // through positions until cell_at returns (row, col).
+    use taino_edit_extensions::cell_at;
+    for pos in 0..doc.content().size() {
+        if let Some(c) = cell_at(&doc, pos) {
+            if c.row == row && c.col == col {
+                let mut tr = state.tr();
+                tr.set_selection(Selection::caret(c.cell_pos + 2));
+                return state.apply(tr);
+            }
+        }
+        // ResolvedPos errors are silent — keep scanning.
+        let _ = ResolvedPos::resolve(&doc, pos);
+    }
+    state
+}
+
+#[test]
+fn select_caret_row_covers_the_whole_caret_row() {
+    let s = run(doc_with_paragraph(), &insert_table(4, 4));
+    // Drop the caret in row 2 col 1, then "select row".
+    let s = put_caret_in_cell(s, 2, 1);
+    assert!(select_caret_row()(&s, None), "must apply inside a table");
+    let s = run(s, &select_caret_row());
+    match s.selection() {
+        Selection::Cell { .. } => {}
+        other => panic!("select_caret_row must produce a Cell selection, got {other:?}"),
+    }
+    // Now merge — the whole of row 2 collapses to one colspan=4 cell.
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("colspan=\"4\""),
+        "merging the selected row should yield colspan=4: {html}"
+    );
+}
+
+#[test]
+fn select_caret_column_covers_the_whole_caret_column() {
+    let s = run(doc_with_paragraph(), &insert_table(4, 4));
+    let s = put_caret_in_cell(s, 1, 3);
+    let s = run(s, &select_caret_column());
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("rowspan=\"4\""),
+        "merging the selected column should yield rowspan=4: {html}"
+    );
+}
+
+#[test]
+fn select_caret_row_is_a_noop_outside_a_table() {
+    let s = doc_with_paragraph();
+    assert!(
+        !select_caret_row()(&s, None),
+        "must not apply when the caret isn't in a table"
+    );
+    assert!(
+        !select_caret_column()(&s, None),
+        "must not apply when the caret isn't in a table"
+    );
+}
+
+#[test]
+fn merge_works_on_interior_rectangle_far_from_origin() {
+    // Regression: merge_cells used to silently fail (or only act partially)
+    // on rectangles outside the top-left corner. A 5×5 table merging
+    // rows 2-3, cols 3-4 must produce a 2×2 merged cell at exactly that
+    // position and leave row 0 / cols 0-2 untouched.
+    let s = run(doc_with_paragraph(), &insert_table(5, 5));
+    let s = run(s, &select_cell_range((2, 3), (3, 4)));
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("colspan=\"2\"") && html.contains("rowspan=\"2\""),
+        "expected a 2x2 merged cell somewhere in the table: {html}"
+    );
+    // Row 0 untouched: still 5 cells, no spans.
+    let row0 = html.split("<tr>").nth(1).unwrap();
+    let row0 = row0.split("</tr>").next().unwrap();
+    assert_eq!(
+        row0.matches("<td").count(),
+        5,
+        "row 0 must keep all 5 cells: {row0}"
+    );
+    assert!(
+        !row0.contains("colspan") && !row0.contains("rowspan"),
+        "row 0 must have no spans: {row0}"
+    );
+}
+
+#[test]
+fn merge_after_growing_the_table_with_add_row_add_column() {
+    // Regression: the demo starts with a small table (2x3) and lets the user
+    // grow it with add_row_after / add_column_after. Merging cells in the
+    // *added* region must work the same as in a freshly-inserted big table.
+    let s = run(doc_with_paragraph(), &insert_table(2, 3));
+    // Grow to 5x5 by adding 3 rows and 2 columns.
+    let s = run(s, &add_row_after());
+    let s = run(s, &add_row_after());
+    let s = run(s, &add_row_after());
+    let s = run(s, &add_column_after());
+    let s = run(s, &add_column_after());
+    let html = s.doc().to_html();
+    assert_eq!(
+        dims(&html),
+        (5, 5),
+        "should be 5x5 after grow ops: {html}"
+    );
+    // Now merge an interior rectangle (rows 2-3, cols 3-4).
+    let s = run(s, &select_cell_range((2, 3), (3, 4)));
+    let s = run(s, &merge_cells());
+    let html = s.doc().to_html();
+    assert!(
+        html.contains("colspan=\"2\"") && html.contains("rowspan=\"2\""),
+        "merge in the grown region must produce 2x2 span: {html}"
     );
 }
 

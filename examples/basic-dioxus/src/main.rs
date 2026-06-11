@@ -15,8 +15,8 @@ use taino_edit_dioxus::{
 };
 use taino_edit_extensions::{
     add_column_after, add_row_after, build_keymap_with, build_schema_with, delete_table,
-    insert_table, merge_cells, redo_command, select_cell_range, split_cell, toggle_header_row,
-    undo_command, Bold, Heading, History, Italic, Paragraph, Table,
+    insert_table, merge_cells, redo_command, select_caret_column, select_caret_row, split_cell,
+    toggle_header_row, undo_command, Bold, Heading, History, Italic, Paragraph, Table,
 };
 use taino_edit_table_view::TableView;
 
@@ -109,11 +109,16 @@ fn App() -> Element {
         }
     };
 
-    // Merge the caret's whole row: select it end-to-end, then merge. The
-    // demo inserts 3×3 tables, so columns 0..=2 of row 0 cover a full row;
-    // a real app would drive `select_cell_range` from a mouse drag.
+    // Merge the caret's whole row / column. `select_caret_row` reads the
+    // live table width, so this stays correct as the user grows the table
+    // (the previous hard-coded `(0,0)-(0,2)` only worked for the original
+    // 3×3 — a great way to ship the bug "merge only touches row 1 cols 1-3").
     let on_merge_row = move |_| {
-        run_cmd(state, select_cell_range((0, 0), (0, 2)));
+        run_cmd(state, select_caret_row());
+        run_cmd(state, merge_cells());
+    };
+    let on_merge_col = move |_| {
+        run_cmd(state, select_caret_column());
         run_cmd(state, merge_cells());
     };
 
@@ -198,6 +203,11 @@ fn App() -> Element {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: on_merge_row,
                     "Merge row"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: on_merge_col,
+                    "Merge col"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),

@@ -12,10 +12,10 @@ use leptos::prelude::*;
 use taino_edit_extensions::{
     add_column_after, add_row_after, align_center, align_justify, align_left, align_right,
     build_keymap_with, build_schema_with, delete_column, delete_row, delete_table, insert_image,
-    insert_table, lift_list_item, merge_cells, redo_command, remove_link, select_cell_range,
-    set_column_width, set_link, split_cell, to_lowercase, to_uppercase, toggle_header_row,
-    undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote, Bold, Code,
-    CodeBlock, Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
+    insert_table, lift_list_item, merge_cells, redo_command, remove_link, select_caret_column,
+    select_caret_row, set_column_width, set_link, split_cell, to_lowercase, to_uppercase,
+    toggle_header_row, undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote,
+    Bold, Code, CodeBlock, Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
 };
 use taino_edit_leptos::{
     set_block_type, toggle_mark, wrap_in, Attrs, Command, Decoration, EditorState, EditorView,
@@ -227,11 +227,16 @@ fn App() -> impl IntoView {
         s.with_value(|c| run_command(c));
     };
 
-    // Merge the caret's whole row: select it end-to-end, then merge. The
-    // demo inserts 3×3 tables, so selecting columns 0..=2 of row 0 covers a
-    // full row; a real app drives `select_cell_range` from a mouse drag.
+    // Merge the caret's whole row / column. `select_caret_row` reads the
+    // live table width, so this stays correct as the user grows the table
+    // (the previous hard-coded `(0,0)-(0,2)` only worked for the original
+    // 3×3 — a great way to ship the bug "merge only touches row 1 cols 1-3").
     let on_merge_row = move |_| {
-        run_command(&select_cell_range((0, 0), (0, 2)));
+        run_command(&select_caret_row());
+        run_command(&merge_cells());
+    };
+    let on_merge_col = move |_| {
+        run_command(&select_caret_column());
         run_command(&merge_cells());
     };
 
@@ -337,6 +342,7 @@ fn App() -> impl IntoView {
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(col_del_slot)>"− Col"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(header_slot)>"Header row"</button>
                 <button on:mousedown=keep_focus on:click=on_merge_row>"Merge row"</button>
+                <button on:mousedown=keep_focus on:click=on_merge_col>"Merge col"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(split_slot)>"Split cell"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(wider_slot)>"Col wider"</button>
                 <button on:mousedown=keep_focus on:click=move |_| run_slot(narrower_slot)>"Col narrower"</button>

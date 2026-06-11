@@ -1144,6 +1144,62 @@ pub fn select_cell_range(anchor: (usize, usize), head: (usize, usize)) -> Comman
     })
 }
 
+/// Select every cell in the caret's logical row. A no-op outside a table.
+/// Chains naturally before [`merge_cells`] (or any cell-range op) to give
+/// hosts a coordinate-free "operate on this row" primitive — the row width
+/// is read live, so growing the table doesn't desync the toolbar.
+pub fn select_caret_row() -> Command {
+    select_caret_line(/* row_axis = */ true)
+}
+
+/// Select every cell in the caret's logical column. A no-op outside a
+/// table. Companion to [`select_caret_row`].
+pub fn select_caret_column() -> Command {
+    select_caret_line(/* row_axis = */ false)
+}
+
+fn select_caret_line(row_axis: bool) -> Command {
+    Box::new(move |state, dispatch| {
+        let Ok(rp) = ResolvedPos::resolve(state.doc(), state.selection().from()) else {
+            return false;
+        };
+        let Some((td, row_idx, cell_idx)) = find_table(&rp) else {
+            return false;
+        };
+        let table = rp.node(td);
+        let tstart = rp.before(td);
+        let map = TableMap::of(table);
+        let Some((lrow, lcol)) = map.logical_of((row_idx, cell_idx)) else {
+            return false;
+        };
+        if map.width == 0 || map.height == 0 {
+            return false;
+        }
+        let (anchor_log, head_log) = if row_axis {
+            ((lrow, 0), (lrow, map.width - 1))
+        } else {
+            ((0, lcol), (map.height - 1, lcol))
+        };
+        let (Some(a), Some(h)) = (
+            map.at(anchor_log.0, anchor_log.1),
+            map.at(head_log.0, head_log.1),
+        ) else {
+            return false;
+        };
+        let anchor_pos = cell_before_abs(table, tstart, a.0, a.1);
+        let head_pos = cell_before_abs(table, tstart, h.0, h.1);
+        if let Some(d) = dispatch {
+            let mut tx = state.tr();
+            tx.set_selection(Selection::Cell {
+                anchor: anchor_pos,
+                head: head_pos,
+            });
+            d(tx);
+        }
+        true
+    })
+}
+
 /// Resolve an absolute cell-before position into its logical `(row, col)`.
 fn logical_at_pos(
     table: &Node,

@@ -278,11 +278,6 @@ pointer-interaction platform.
 - 🐛 Applying a mark/block type to a multi-word selection occasionally leaves
   the trailing word(s) unformatted — an intermittent selection-boundary
   mapping issue (reported during v0.5 manual testing). Next-up to investigate.
-- 🐛 Table cell operations only act on the first row and the first three
-  columns: `merge_cells` (and likely the other table commands — split, add /
-  delete row/column, header toggle) silently ignore cells outside that
-  range, so anything added beyond the initial 3×N skeleton can't be edited.
-  Audit every table command's selection-bounds handling (reported 2026-05-28).
 - 🐛 The Dioxus adapter exposes fewer editing options than the Leptos one
   (lists in particular are missing from `basic-dioxus`'s toolbar, and the
   extension surface should be re-checked end-to-end for parity). Treat it

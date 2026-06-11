@@ -55,8 +55,9 @@ pub use paragraph::Paragraph;
 pub use table::{
     add_column_after, add_column_before, add_row_after, add_row_before, cell_at,
     cells_in_selection, delete_column, delete_row, delete_table, go_to_next_cell, go_to_prev_cell,
-    insert_table, merge_cells, select_cell_range, set_column_width, split_cell, toggle_header_cell,
-    toggle_header_column, toggle_header_row, CellAt, Table,
+    insert_table, merge_cells, select_caret_column, select_caret_row, select_cell_range,
+    set_column_width, split_cell, toggle_header_cell, toggle_header_column, toggle_header_row,
+    CellAt, Table,
 };
 pub use transform_case::{to_lowercase, to_uppercase, TransformCase};
 
