@@ -8,6 +8,42 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-06-11
+
+### Added
+
+- **`<TainoEditor>` for Dioxus now owns keyboard editing** (parity with the
+  Leptos adapter shipped in 0.5.1). The component accepts an optional
+  `keymap: KeymapProp` prop; on every `keydown` it reads the *live* DOM
+  selection, runs the matching keymap command, and applies the result to
+  the view + selection + decorations **synchronously** inside the handler.
+  Structural keys (Enter/Backspace/Delete) always `preventDefault`. Removes
+  the same class of "stale model selection" bugs the Leptos adapter fixed
+  last release.
+- **Coordinate-free row/column primitives for tables**:
+  `select_caret_row()` and `select_caret_column()` produce a
+  `Selection::Cell` covering the whole row/column the caret sits in, read
+  from the live `TableMap`. Chaining either before `merge_cells()` gives a
+  one-liner "merge this row" / "merge this column" toolbar action that
+  stays correct as the table grows.
+- **Demos:** both Dioxus and Leptos toolbars now include a "Merge col"
+  button alongside "Merge row", both built on the new primitives.
+
+### Fixed
+
+- **Ordered lists kept counting from 1 after a middle item was lifted.**
+  `lift_list_item` split the original list into a before-list and an
+  after-list, but both inherited the parent's `attrs` verbatim — so the
+  after-list reset to `start=1`. Numbering now resumes:
+  `after_list.start = original_start + before_items_count + 1`.
+  `bullet_list` and other list types keep their attrs unchanged. Reached
+  by every "exit the list" path: `Backspace` at item start, Enter on an
+  empty bullet, and the dedicated `lift_list_item` keymap entry.
+- **"Merge row" demo button only acted on row 0, columns 0-2.** Both demos
+  hard-coded `select_cell_range((0, 0), (0, 2))`, so any caret outside row
+  0 or any table grown past 3 columns mis-selected. The buttons now chain
+  `select_caret_row()` / `select_caret_column()` with `merge_cells()`.
+
 ## [0.5.1] - 2026-05-27
 
 ### Fixed
