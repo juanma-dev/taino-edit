@@ -43,6 +43,6 @@ wasm-bindgen-test = "0.3.71"
 # they are target-gated to keep `cargo test` (host) building cleanly.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 dioxus-web = "0.6"
-gloo-timers = { version = "0.3.0", features = ["futures"] }
+gloo-timers = { version = "0.4.0", features = ["futures"] }
 taino-edit-extensions = { workspace = true }
 taino-edit-table-view = { workspace = true }
