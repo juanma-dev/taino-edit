@@ -113,6 +113,7 @@ dependencies = [
  "taino-edit-dioxus",
  "taino-edit-extensions",
  "taino-edit-table-view",
+ "web-sys",
 ]
 
 [[package]]

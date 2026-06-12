@@ -1,24 +1,49 @@
-//! taino-edit + Dioxus demo: a `<TainoEditor>` with a toolbar, the
-//! `Mod-…` keymap wired on keydown, and live HTML + JSON panels. Build
-//! with `dx serve` (or `trunk serve`) in this directory.
+//! taino-edit + Dioxus demo: a `<TainoEditor>` with the full toolbar
+//! (marks, link/image, headings, alignment, lists, blockquote, code-block,
+//! case transforms, undo/redo, tables), the `Mod-…` keymap wired on
+//! keydown, and live HTML + JSON panels. Build with `dx serve` (or
+//! `trunk serve`) in this directory.
 //!
 //! The Dioxus adapter has full event- and plugin-wiring parity with the
 //! Leptos one (input → transform, IME composition, paste, selectionchange,
-//! plus `ViewPlugin` pointer events) — type into the editor, click the
+//! plus `ViewPlugin` pointer events) — and this demo exercises the same
+//! extension set as `basic-leptos`: type into the editor, click the
 //! toolbar, drag across table cells, and watch the panels track the
 //! document state.
 
 use dioxus::prelude::*;
 use taino_edit_dioxus::{
-    set_block_type, toggle_mark, Attrs, Command, EditorState, KeymapProp, NodeSpec, SchemaBuilder,
-    TainoEditor, Transaction, ViewPlugins,
+    set_block_type, toggle_mark, wrap_in, Attrs, Command, EditorState, KeymapProp, NodeSpec,
+    SchemaBuilder, Selection, TainoEditor, Transaction, ViewPlugins,
 };
 use taino_edit_extensions::{
-    add_column_after, add_row_after, build_keymap_with, build_schema_with, delete_table,
-    insert_table, merge_cells, redo_command, select_caret_column, select_caret_row, split_cell,
-    toggle_header_row, undo_command, Bold, Heading, History, Italic, Paragraph, Table,
+    add_column_after, add_row_after, align_center, align_justify, align_left, align_right,
+    build_keymap_with, build_schema_with, delete_column, delete_row, delete_table, insert_image,
+    insert_table, lift_list_item, merge_cells, redo_command, remove_link, select_caret_column,
+    select_caret_row, set_column_width, set_link, split_cell, to_lowercase, to_uppercase,
+    toggle_header_row, undo_command, wrap_in_bullet_list, wrap_in_ordered_list, Align, Blockquote,
+    Bold, Code, CodeBlock, Heading, History, Image, Italic, Link, Lists, Paragraph, Table,
 };
 use taino_edit_table_view::TableView;
+
+/// The extension set this demo runs on — identical to `basic-leptos`.
+fn extensions() -> [&'static dyn taino_edit_extensions::Extension; 13] {
+    [
+        &Paragraph,
+        &Heading,
+        &Bold,
+        &Italic,
+        &Code,
+        &Link,
+        &Image,
+        &Align,
+        &Blockquote,
+        &CodeBlock,
+        &Lists,
+        &Table,
+        &History,
+    ]
+}
 
 fn main() {
     dioxus::launch(App);
@@ -62,8 +87,7 @@ fn App() -> Element {
                 ..Default::default()
             },
         );
-    let exts: Vec<&dyn taino_edit_extensions::Extension> =
-        vec![&Paragraph, &Heading, &Bold, &Italic, &History, &Table];
+    let exts = extensions();
     let schema = build_schema_with(base, &exts, "doc").expect("schema builds");
 
     let title = schema
@@ -93,11 +117,7 @@ fn App() -> Element {
     // Build the keymap once from the same extension set. `<TainoEditor>`
     // owns `keydown` (synchronous, live-selection), so we just hand it the
     // keymap via the `KeymapProp` wrapper.
-    let keymap = {
-        let exts: Vec<&dyn taino_edit_extensions::Extension> =
-            vec![&Paragraph, &Heading, &Bold, &Italic, &History, &Table];
-        build_keymap_with(&exts, &schema, /*mac=*/ false)
-    };
+    let keymap = build_keymap_with(&extensions(), &schema, /*mac=*/ false);
     let state = use_signal(|| EditorState::new(doc, schema));
 
     // Toolbar buttons run a command and keep editor focus (mousedown
@@ -122,6 +142,36 @@ fn App() -> Element {
         run_cmd(state, merge_cells());
     };
 
+    let on_select_all = move |_| {
+        let mut s = state;
+        let snap = s.peek().clone();
+        let mut tx = snap.tr();
+        tx.set_selection(Selection::All);
+        s.set(snap.apply(tx));
+    };
+
+    // Link command: ask the user for a URL, then dispatch set_link.
+    let on_link = move |_| {
+        let url = web_sys::window().and_then(|w| w.prompt_with_message("URL:").ok().flatten());
+        if let Some(href) = url.filter(|s| !s.is_empty()) {
+            run_cmd(state, set_link(href, None));
+        }
+    };
+
+    // Image command: ask for a URL + alt text, then dispatch insert_image.
+    let on_image = move |_| {
+        let win = web_sys::window();
+        let src = win
+            .as_ref()
+            .and_then(|w| w.prompt_with_message("Image URL:").ok().flatten())
+            .filter(|s| !s.is_empty());
+        let Some(src) = src else { return };
+        let alt = win
+            .as_ref()
+            .and_then(|w| w.prompt_with_message("Alt text:").ok().flatten());
+        run_cmd(state, insert_image(src, alt.filter(|s| !s.is_empty())));
+    };
+
     rsx! {
         main {
             style: "font-family: system-ui; max-width: 60rem; margin: 1.5rem auto; padding: 0 1rem;",
@@ -134,37 +184,115 @@ fn App() -> Element {
 
             div {
                 role: "toolbar",
-                style: "display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem;",
+                style: "display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; align-items:center;",
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| mark_cmd("strong"),
-                    "Bold (Mod-b)"
+                    "Bold"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| mark_cmd("em"),
-                    "Italic (Mod-i)"
+                    "Italic"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| mark_cmd("code"),
+                    "‹/› code"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: on_link,
+                    "Link…"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, remove_link()),
+                    "Unlink"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: on_image,
+                    "Image…"
                 }
                 span { style: "width:.5rem" }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, set_block_type("paragraph", Attrs::new())),
-                    "Paragraph (Mod-Alt-0)"
+                    "P"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, heading_cmd(1)),
-                    "H1 (Mod-Alt-1)"
+                    "H1"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, heading_cmd(2)),
-                    "H2 (Mod-Alt-2)"
+                    "H2"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, heading_cmd(3)),
-                    "H3 (Mod-Alt-3)"
+                    "H3"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, wrap_in("blockquote", Attrs::new())),
+                    "❝ Quote"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, set_block_type("code_block", Attrs::new())),
+                    "<> Code"
+                }
+                span { style: "width:.5rem" }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, align_left()),
+                    "⇤"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, align_center()),
+                    "≡"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, align_right()),
+                    "⇥"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, align_justify()),
+                    "☰"
+                }
+                span { style: "width:.5rem" }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, wrap_in_bullet_list()),
+                    "• List"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, wrap_in_ordered_list()),
+                    "1. List"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, lift_list_item()),
+                    "⇤ Lift"
+                }
+                span { style: "width:.5rem" }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, to_uppercase()),
+                    "AA"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, to_lowercase()),
+                    "aa"
                 }
                 span { style: "width:.5rem" }
                 button {
@@ -177,8 +305,17 @@ fn App() -> Element {
                     onclick: move |_| run_cmd(state, redo_command()),
                     "Redo (Mod-Shift-z)"
                 }
-                span { style: "width:.5rem" }
-                strong { style: "font-size:.8rem; color:#555; align-self:center;", "Table:" }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: on_select_all,
+                    "Select all"
+                }
+            }
+
+            div {
+                role: "toolbar",
+                style: "display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; align-items:center;",
+                strong { style: "font-size:.8rem; color:#555;", "Table:" }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, insert_table(3, 3)),
@@ -193,6 +330,16 @@ fn App() -> Element {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, add_column_after()),
                     "+ Col"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, delete_row()),
+                    "− Row"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, delete_column()),
+                    "− Col"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
@@ -213,6 +360,16 @@ fn App() -> Element {
                     onmousedown: move |evt| evt.prevent_default(),
                     onclick: move |_| run_cmd(state, split_cell()),
                     "Split cell"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, set_column_width(0, 220)),
+                    "Col wider"
+                }
+                button {
+                    onmousedown: move |evt| evt.prevent_default(),
+                    onclick: move |_| run_cmd(state, set_column_width(0, 80)),
+                    "Col narrower"
                 }
                 button {
                     onmousedown: move |evt| evt.prevent_default(),
