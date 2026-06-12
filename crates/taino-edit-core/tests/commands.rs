@@ -193,13 +193,20 @@ fn list_doc(s: &Schema, items: &[&str]) -> Node {
         .iter()
         .map(|t| {
             let p = s
-                .node("paragraph", Default::default(), vec![s.text(t, vec![]).unwrap()], vec![])
+                .node(
+                    "paragraph",
+                    Default::default(),
+                    vec![s.text(t, vec![]).unwrap()],
+                    vec![],
+                )
                 .unwrap();
             s.node("list_item", Default::default(), vec![p], vec![])
                 .unwrap()
         })
         .collect();
-    let ul = s.node("bullet_list", Default::default(), lis, vec![]).unwrap();
+    let ul = s
+        .node("bullet_list", Default::default(), lis, vec![])
+        .unwrap();
     s.node("doc", Default::default(), vec![ul], vec![]).unwrap()
 }
 
@@ -289,11 +296,31 @@ fn join_backward_joins_paragraph_into_list() {
         .unwrap();
 
     let s = base;
-    let p1 = s.node("paragraph", Default::default(), vec![s.text("Hello", vec![]).unwrap()], vec![]).unwrap();
-    let li = s.node("list_item", Default::default(), vec![p1], vec![]).unwrap();
-    let ul = s.node("bullet_list", Default::default(), vec![li], vec![]).unwrap();
-    let p2 = s.node("paragraph", Default::default(), vec![s.text("World", vec![]).unwrap()], vec![]).unwrap();
-    let doc = s.node("doc", Default::default(), vec![ul, p2], vec![]).unwrap();
+    let p1 = s
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![s.text("Hello", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let li = s
+        .node("list_item", Default::default(), vec![p1], vec![])
+        .unwrap();
+    let ul = s
+        .node("bullet_list", Default::default(), vec![li], vec![])
+        .unwrap();
+    let p2 = s
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![s.text("World", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let doc = s
+        .node("doc", Default::default(), vec![ul, p2], vec![])
+        .unwrap();
 
     let st = with_selection(EditorState::new(doc, s.clone()), Selection::caret(12));
     let cmd: Command = Box::new(taino_edit_core::join_backward);
@@ -357,11 +384,31 @@ fn join_backward_joins_paragraph_into_list_with_text() {
         .unwrap();
 
     let s = base;
-    let p1 = s.node("paragraph", Default::default(), vec![s.text("HelloWorld test", vec![]).unwrap()], vec![]).unwrap();
-    let li = s.node("list_item", Default::default(), vec![p1], vec![]).unwrap();
-    let ul = s.node("bullet_list", Default::default(), vec![li], vec![]).unwrap();
-    let p2 = s.node("paragraph", Default::default(), vec![s.text("abc", vec![]).unwrap()], vec![]).unwrap();
-    let doc = s.node("doc", Default::default(), vec![ul, p2], vec![]).unwrap();
+    let p1 = s
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![s.text("HelloWorld test", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let li = s
+        .node("list_item", Default::default(), vec![p1], vec![])
+        .unwrap();
+    let ul = s
+        .node("bullet_list", Default::default(), vec![li], vec![])
+        .unwrap();
+    let p2 = s
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![s.text("abc", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let doc = s
+        .node("doc", Default::default(), vec![ul, p2], vec![])
+        .unwrap();
 
     let st = with_selection(EditorState::new(doc, s.clone()), Selection::caret(22));
     let cmd: Command = Box::new(taino_edit_core::join_backward);
@@ -425,9 +472,20 @@ fn test_split_at_depth_2() {
         .unwrap();
 
     let s = base;
-    let p1 = s.node("paragraph", Default::default(), vec![s.text("Test List", vec![]).unwrap()], vec![]).unwrap();
-    let li = s.node("list_item", Default::default(), vec![p1], vec![]).unwrap();
-    let ul = s.node("bullet_list", Default::default(), vec![li], vec![]).unwrap();
+    let p1 = s
+        .node(
+            "paragraph",
+            Default::default(),
+            vec![s.text("Test List", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let li = s
+        .node("list_item", Default::default(), vec![p1], vec![])
+        .unwrap();
+    let ul = s
+        .node("bullet_list", Default::default(), vec![li], vec![])
+        .unwrap();
     let doc = s.node("doc", Default::default(), vec![ul], vec![]).unwrap();
 
     let st = EditorState::new(doc, s.clone());
@@ -484,9 +542,20 @@ fn test_split_heading_in_list() {
         .unwrap();
 
     let s = base;
-    let p1 = s.node("heading", Default::default(), vec![s.text("Test List", vec![]).unwrap()], vec![]).unwrap();
-    let li = s.node("list_item", Default::default(), vec![p1], vec![]).unwrap();
-    let ul = s.node("bullet_list", Default::default(), vec![li], vec![]).unwrap();
+    let p1 = s
+        .node(
+            "heading",
+            Default::default(),
+            vec![s.text("Test List", vec![]).unwrap()],
+            vec![],
+        )
+        .unwrap();
+    let li = s
+        .node("list_item", Default::default(), vec![p1], vec![])
+        .unwrap();
+    let ul = s
+        .node("bullet_list", Default::default(), vec![li], vec![])
+        .unwrap();
     let doc = s.node("doc", Default::default(), vec![ul], vec![]).unwrap();
 
     let st = EditorState::new(doc, s.clone());

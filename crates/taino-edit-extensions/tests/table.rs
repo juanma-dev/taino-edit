@@ -469,11 +469,7 @@ fn merge_after_growing_the_table_with_add_row_add_column() {
     let s = run(s, &add_column_after());
     let s = run(s, &add_column_after());
     let html = s.doc().to_html();
-    assert_eq!(
-        dims(&html),
-        (5, 5),
-        "should be 5x5 after grow ops: {html}"
-    );
+    assert_eq!(dims(&html), (5, 5), "should be 5x5 after grow ops: {html}");
     // Now merge an interior rectangle (rows 2-3, cols 3-4).
     let s = run(s, &select_cell_range((2, 3), (3, 4)));
     let s = run(s, &merge_cells());

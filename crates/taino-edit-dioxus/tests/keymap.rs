@@ -76,10 +76,7 @@ fn host() -> web_sys::Element {
 fn launch(app: fn() -> Element) -> web_sys::Element {
     let h = host();
     let vdom = VirtualDom::new(app);
-    dioxus_web::launch::launch_virtual_dom(
-        vdom,
-        dioxus_web::Config::new().rootelement(h.clone()),
-    );
+    dioxus_web::launch::launch_virtual_dom(vdom, dioxus_web::Config::new().rootelement(h.clone()));
     h
 }
 

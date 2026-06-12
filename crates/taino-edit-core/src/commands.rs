@@ -513,8 +513,11 @@ pub fn join_backward(state: &EditorState, dispatch: Option<&mut Dispatch<'_>>) -
     let prev_sibling_start = rp.before(d) - prev_sibling.node_size();
 
     // Check if the preceding sibling is a structural wrapper node that is not a textblock.
-    if prev_sibling.is_block() && (prev_sibling.child_count() > 0 && !prev_sibling.child(0).is_inline()) {
-        if let Some((last_p, last_p_start)) = find_last_textblock(prev_sibling, prev_sibling_start) {
+    if prev_sibling.is_block()
+        && (prev_sibling.child_count() > 0 && !prev_sibling.child(0).is_inline())
+    {
+        if let Some((last_p, last_p_start)) = find_last_textblock(prev_sibling, prev_sibling_start)
+        {
             let target_end = last_p_start + 1 + last_p.content().size();
             let current_end = rp.after(d);
             if let Some(disp) = dispatch {

@@ -180,10 +180,8 @@ fn wrap_in_list(list_name: &'static str) -> Command {
                 let map_into_list = |p: usize| -> usize {
                     for (bi, (_, b_start, b_end)) in blocks.iter().enumerate() {
                         if p >= *b_start && p < *b_end {
-                            let preceding: usize = blocks[..bi]
-                                .iter()
-                                .map(|(b, _, _)| b.node_size() + 2)
-                                .sum();
+                            let preceding: usize =
+                                blocks[..bi].iter().map(|(b, _, _)| b.node_size() + 2).sum();
                             return start + 1 + preceding + 1 + (p - b_start);
                         }
                     }
@@ -344,7 +342,8 @@ pub fn lift_list_item() -> Command {
                     .iter()
                     .map(|n| n.node_size())
                     .sum();
-                let new_pos = list_start + before_list_size + before_blocks_size + 1 + rp.parent_offset();
+                let new_pos =
+                    list_start + before_list_size + before_blocks_size + 1 + rp.parent_offset();
                 tx.set_selection(Selection::caret(new_pos));
                 d(tx);
             }
