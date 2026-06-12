@@ -11,7 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.5.2` — editor-owned keyboard input in both adapters + coordinate-free table row/column primitives + list/caret editing fixes |
+| **Current release**          | `v0.5.3` — selection-mirror race fix (multi-word drag-select clipping) + `basic-dioxus` full toolbar parity |
 | **Last updated**             | 2026-06-12                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|

@@ -8,6 +8,8 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-06-12
+
 ### Fixed
 
 - **Drag-selecting multiple words no longer intermittently clips the trailing
