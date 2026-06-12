@@ -145,6 +145,51 @@ async fn component_mounts_initial_document() {
 }
 
 #[wasm_bindgen_test]
+async fn drag_extension_after_selection_mirror_is_not_clipped() {
+    // Regression (parity with the Leptos adapter): mid drag-select, a
+    // `selectionchange` mirrors the partial range into state; the effect then
+    // ran *after* the user had already extended the selection, and wrote the
+    // stale partial range back into the browser — clipping the selection's
+    // tail, so a subsequent toggle_mark/set_block_type missed the trailing
+    // word(s).
+    let host = launch(ParagraphApp);
+    settle().await;
+
+    let editor: web_sys::Element = host
+        .query_selector(".taino-editor")
+        .unwrap()
+        .expect("editor div mounted")
+        .dyn_into()
+        .unwrap();
+    let _ = editor.unchecked_ref::<web_sys::HtmlElement>().focus();
+    let text: web_sys::Node = editor
+        .query_selector("p")
+        .unwrap()
+        .expect("paragraph mounted")
+        .first_child()
+        .expect("text node");
+
+    let dom_sel = web_sys::window().unwrap().get_selection().unwrap().unwrap();
+    // Mid-drag: "Hello" is selected and the browser delivers selectionchange.
+    dom_sel.set_base_and_extent(&text, 0, &text, 5).unwrap();
+    let document = web_sys::window().unwrap().document().unwrap();
+    let ev = web_sys::Event::new("selectionchange").unwrap();
+    // The mirror listener runs synchronously on dispatch.
+    let _ = document.dispatch_event(&ev);
+    // Before the effect runs, the drag extends over the second word.
+    dom_sel.set_base_and_extent(&text, 0, &text, 12).unwrap();
+
+    settle().await;
+
+    let dom_sel = web_sys::window().unwrap().get_selection().unwrap().unwrap();
+    assert_eq!(
+        dom_sel.focus_offset(),
+        12,
+        "the effect must not clip a selection the user extended after the mirror"
+    );
+}
+
+#[wasm_bindgen_test]
 async fn component_with_table_view_plugin_renders_the_table() {
     let host = launch(TableApp);
     settle().await;

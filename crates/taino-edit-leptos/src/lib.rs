@@ -91,13 +91,23 @@ pub fn TainoEditor(
                 // Re-sync the DOM selection from state — commands (toolbar
                 // buttons, keymap, input-rules) move the doc selection
                 // without touching the browser, and a no-op `read=write`
-                // here is harmless. We guard against an echo from our own
-                // `selectionchange` handler by setting a flag.
+                // here is harmless.
+                //
+                // Never for updates that merely mirror a selection the
+                // browser already has (`selection_from_dom`): the effect runs
+                // a microtask after the `selectionchange` handler, and the
+                // user may have extended the selection further in between
+                // (e.g. mid drag-select). Writing the mirrored — by now
+                // stale — range back would clip the live selection's tail.
                 //
                 // Only when the editor is focused: otherwise writing the DOM
                 // selection would *steal* focus back from another element
                 // (e.g. a search box driving inline-decoration refreshes).
-                if r.view.has_focus() && r.view.read_selection() != Some(snapshot.selection()) {
+                let mirrored_from_dom = r.selection_from_dom.replace(false);
+                if !mirrored_from_dom
+                    && r.view.has_focus()
+                    && r.view.read_selection() != Some(snapshot.selection())
+                {
                     r.applying_selection.set(true);
                     let _ = r.view.set_selection(snapshot.selection());
                     r.applying_selection.set(false);
@@ -120,11 +130,20 @@ pub fn TainoEditor(
                 view.set_view_plugins(plugins);
                 view.refresh_view_decorations(Some(snapshot.selection()));
                 let applying = std::rc::Rc::new(std::cell::Cell::new(false));
-                let closures = wire_events(&element, runtime, state, applying.clone(), keymap_slot);
+                let from_dom = std::rc::Rc::new(std::cell::Cell::new(false));
+                let closures = wire_events(
+                    &element,
+                    runtime,
+                    state,
+                    applying.clone(),
+                    from_dom.clone(),
+                    keymap_slot,
+                );
                 *rt = Some(EditorRuntime {
                     view,
                     closures,
                     applying_selection: applying,
+                    selection_from_dom: from_dom,
                 });
             }
         });
@@ -146,6 +165,11 @@ struct EditorRuntime {
     /// Set while the effect is pushing state's selection into the DOM, so
     /// the `selectionchange` listener can ignore the resulting echo.
     applying_selection: std::rc::Rc<std::cell::Cell<bool>>,
+    /// Set by the `selectionchange` listener when a state update merely
+    /// mirrors a selection the browser already has; consumed by the effect,
+    /// which must then *not* write that (possibly already stale) selection
+    /// back into the DOM.
+    selection_from_dom: std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 /// A `Closure` registered on a DOM target; on drop the listener is removed.
@@ -174,6 +198,7 @@ fn wire_events(
     runtime: StoredValue<Option<EditorRuntime>, LocalStorage>,
     state: RwSignal<EditorState>,
     applying_selection: std::rc::Rc<std::cell::Cell<bool>>,
+    selection_from_dom: std::rc::Rc<std::cell::Cell<bool>>,
     keymap_slot: StoredValue<Option<Keymap>, LocalStorage>,
 ) -> Vec<EventCloser> {
     let target: web_sys::EventTarget = el.clone().into();
@@ -350,6 +375,7 @@ fn wire_events(
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let doc_target: web_sys::EventTarget = doc.into();
         let applying = applying_selection.clone();
+        let from_dom = selection_from_dom.clone();
         let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
             if applying.get() {
                 return;
@@ -361,6 +387,9 @@ fn wire_events(
             if sel == cur {
                 return;
             }
+            // Mark this update as a DOM-driven mirror so the effect doesn't
+            // write it back into the browser (see the effect for why).
+            from_dom.set(true);
             state.update(|s| {
                 let mut tx = s.tr();
                 tx.set_selection(sel);

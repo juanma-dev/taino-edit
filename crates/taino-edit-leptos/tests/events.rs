@@ -6,7 +6,7 @@
 
 use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
-use taino_edit_core::{DomSpec, EditorState, Node, NodeSpec, Schema, SchemaBuilder};
+use taino_edit_core::{DomSpec, EditorState, Node, NodeSpec, Schema, SchemaBuilder, Selection};
 use taino_edit_leptos::TainoEditor;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
@@ -136,6 +136,55 @@ async fn input_during_composition_does_not_commit() {
     fire(&editor, "compositionend");
     settle().await;
     assert_eq!(state.get_untracked().doc().text_content(), "こんにちは");
+}
+
+#[wasm_bindgen_test]
+async fn drag_extension_after_selection_mirror_is_not_clipped() {
+    // Regression: mid drag-select, a `selectionchange` mirrors the partial
+    // range into state; the reactive effect then ran *after* the user had
+    // already extended the selection, and wrote the stale partial range back
+    // into the browser — clipping the selection's tail, so a subsequent
+    // toggle_mark/set_block_type missed the trailing word(s).
+    let host = host();
+    let s = schema();
+    let state = RwSignal::new(EditorState::new(
+        doc(&s, vec![para(&s, "hello world")]),
+        s.clone(),
+    ));
+
+    leptos::mount::mount_to(host.clone(), move || view! { <TainoEditor state=state /> }).forget();
+    settle().await;
+
+    let (editor, text) = dom_handles(&host);
+    let _ = editor.unchecked_ref::<HtmlElement>().focus();
+
+    let dom_sel = web_sys::window().unwrap().get_selection().unwrap().unwrap();
+    // Mid-drag: "hello" is selected and the browser delivers selectionchange.
+    dom_sel.set_base_and_extent(&text, 0, &text, 5).unwrap();
+    let document = web_sys::window().unwrap().document().unwrap();
+    let ev = web_sys::Event::new("selectionchange").unwrap();
+    // The mirror listener runs synchronously on dispatch.
+    let _ = document.dispatch_event(&ev);
+    // Before the effect runs, the drag extends over the second word.
+    dom_sel.set_base_and_extent(&text, 0, &text, 11).unwrap();
+
+    settle().await; // effect + the browser's own queued selectionchange
+    settle().await;
+
+    let dom_sel = web_sys::window().unwrap().get_selection().unwrap().unwrap();
+    assert_eq!(
+        dom_sel.focus_offset(),
+        11,
+        "the effect must not clip a selection the user extended after the mirror"
+    );
+    assert_eq!(
+        state.get_untracked().selection(),
+        Selection::Text {
+            anchor: 1,
+            head: 12
+        },
+        "state must converge on the full selection"
+    );
 }
 
 #[wasm_bindgen_test]

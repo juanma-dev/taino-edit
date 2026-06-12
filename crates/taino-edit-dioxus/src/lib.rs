@@ -167,7 +167,18 @@ pub fn TainoEditor(
             rt.view.update(snapshot.doc().clone());
             // Only re-sync the DOM selection when the editor is focused, so we
             // never steal focus back from another element (e.g. a search box).
-            if rt.view.has_focus() && rt.view.read_selection() != Some(snapshot.selection()) {
+            //
+            // Never for updates that merely mirror a selection the browser
+            // already has (`selection_from_dom`): the effect runs after the
+            // `selectionchange` handler, and the user may have extended the
+            // selection further in between (e.g. mid drag-select). Writing
+            // the mirrored — by now stale — range back would clip the live
+            // selection's tail.
+            let mirrored_from_dom = rt.selection_from_dom.replace(false);
+            if !mirrored_from_dom
+                && rt.view.has_focus()
+                && rt.view.read_selection() != Some(snapshot.selection())
+            {
                 rt.applying_selection.set(true);
                 let _ = rt.view.set_selection(snapshot.selection());
                 rt.applying_selection.set(false);
@@ -191,6 +202,7 @@ pub fn TainoEditor(
         view.set_view_plugins(plugins.take());
         view.refresh_view_decorations(Some(snapshot.selection()));
         let applying = Rc::new(Cell::new(false));
+        let from_dom = Rc::new(Cell::new(false));
         // Park the keymap behind a shared cell so the keydown closure (and
         // the runtime, for diagnostics) can reach it.
         let keymap_cell: Rc<RefCell<Option<Keymap>>> = Rc::new(RefCell::new(keymap.take()));
@@ -199,12 +211,14 @@ pub fn TainoEditor(
             runtime,
             state,
             applying.clone(),
+            from_dom.clone(),
             keymap_cell.clone(),
         );
         runtime.set(Some(EditorRuntime {
             view,
             closures,
             applying_selection: applying,
+            selection_from_dom: from_dom,
             keymap: keymap_cell,
         }));
     };
@@ -226,6 +240,11 @@ struct EditorRuntime {
     /// Set while the effect pushes state's selection into the DOM, so the
     /// `selectionchange` listener can ignore the resulting echo.
     applying_selection: Rc<Cell<bool>>,
+    /// Set by the `selectionchange` listener when a state update merely
+    /// mirrors a selection the browser already has; consumed by the effect,
+    /// which must then *not* write that (possibly already stale) selection
+    /// back into the DOM.
+    selection_from_dom: Rc<Cell<bool>>,
     /// The installed keymap (if any). Shared with the `keydown` closure so it
     /// can run commands synchronously against the live state.
     #[allow(dead_code)] // accessed via the keydown closure's clone of the Rc.
@@ -286,6 +305,7 @@ fn wire_events(
     mut runtime: Signal<Option<EditorRuntime>>,
     mut state: Signal<EditorState>,
     applying_selection: Rc<Cell<bool>>,
+    selection_from_dom: Rc<Cell<bool>>,
     keymap_cell: Rc<RefCell<Option<Keymap>>>,
 ) -> Vec<EventCloser> {
     let target: web_sys::EventTarget = el.clone().into();
@@ -419,6 +439,7 @@ fn wire_events(
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let doc_target: web_sys::EventTarget = doc.into();
         let applying = applying_selection;
+        let from_dom = selection_from_dom;
         let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
             if applying.get() {
                 return;
@@ -430,6 +451,9 @@ fn wire_events(
             if sel == cur {
                 return;
             }
+            // Mark this update as a DOM-driven mirror so the effect doesn't
+            // write it back into the browser (see the effect for why).
+            from_dom.set(true);
             let mut s = state;
             let next = {
                 let snap = s.peek();
