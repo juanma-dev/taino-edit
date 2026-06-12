@@ -8,6 +8,25 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Drag-selecting multiple words no longer intermittently clips the trailing
+  word(s)** (so a following Bold / heading / alignment command missed them).
+  Both adapters mirror the browser selection into state on `selectionchange`,
+  and the reactive effect then re-synced the DOM selection *from* state — but
+  the effect runs a beat after the handler, so when the user had extended the
+  selection in between (mid drag-select), the effect wrote the stale mirrored
+  range back into the browser, snapping the selection's tail off. Mirror
+  updates are now tagged (`selection_from_dom`) and the effect skips the
+  write-back for them. Regression browser tests reproduce the race
+  deterministically in both adapters.
+- **`basic-dioxus` demo reaches full toolbar parity with `basic-leptos`.**
+  The Dioxus demo ran on 6 extensions (no lists at all); it now uses the same
+  13-extension set and full toolbar: inline `code`, Link/Unlink, Image,
+  blockquote, code-block, alignment, bullet/ordered lists + lift, upper/lower
+  case, Select all, and the missing table buttons (− Row, − Col, column
+  width).
+
 ## [0.5.2] - 2026-06-11
 
 ### Added

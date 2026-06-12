@@ -13,22 +13,47 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: v0.3.0 released
+## Status: v0.5.2 released
 
-Seven crates on crates.io. v0.3 adds **full tables** (span-correct
-structural editing, cell selection + merge/split, and pointer
-interaction) on a new reusable `ViewPlugin` platform, and brings the
-Dioxus adapter to event-wiring parity with Leptos. Tests pass
+Seven crates on crates.io. The v0.5 line adds a **`schema!` macro**,
+**inline (range-level) decorations** drawn as a scroll-aware overlay,
+**editor-owned keyboard input** in both adapters (synchronous,
+live-selection — no stale-caret bugs), and a string of editing fixes
+surfaced by dog-fooding (caret motion across block boundaries, ordered-list
+numbering, multi-block commands, selection-mirror race). Tests pass
 workspace-wide:
 
 | | |
 |---|---|
-| Host tests | **184** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, plugin registry, Markdown serializer + parser, the `Selection::Cell` variant, and **13 extensions** including the full table command set) |
-| Browser tests | wasm-bindgen cases in headless Chromium 148 — mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, decorations, Leptos + Dioxus component/event wiring, **table rendering**, the **`ViewPlugin` infra**, and **`TableView` pointer interaction** (cell drag-select, highlight, resize) |
+| Host tests | **214** (model, schema, content automaton, replace, steps, transforms, state, history, commands, keymap, input-rules, plugin registry, Markdown serializer + parser, the `Selection::Cell` variant, and **13 extensions** including the full table command set) |
+| Browser tests | wasm-bindgen cases in headless Chromium 148 — mount, diff/patch, selection sync, DOM-typing → Transform, IME, clipboard, drag/drop, focus, node + inline decorations, Leptos + Dioxus component/event/keymap wiring, **table rendering**, the **`ViewPlugin` infra**, and **`TableView` pointer interaction** (cell drag-select, highlight, resize) |
 
 See **[DESIGN_NOTES.md](DESIGN_NOTES.md)** for the architecture, the
 scope budget, and the resolved design decisions; **[ROADMAP.md](ROADMAP.md)**
 tracks phase progress and what's deferred.
+
+## What's new in v0.4 / v0.5 (2026-05-26 … 2026-06-11)
+
+- **`schema! { .. }` macro** — declarative sugar over `SchemaBuilder`
+  (plain `macro_rules!`, no proc-macro crate).
+- **Inline (range-level) decorations** — `Decoration::Inline` highlights
+  arbitrary inline ranges (search hits, comments, remote selections) as a
+  scroll-aware overlay that never splits the editable text nodes.
+- **The editor owns keyboard input** in both adapters: `keydown` reads the
+  *live* DOM selection, runs the keymap command and applies the result
+  synchronously, eliminating the "stale model selection" class of bugs.
+- **Coordinate-free table primitives** — `select_caret_row()` /
+  `select_caret_column()` make "merge this row/column" one-liners that
+  stay correct as the table grows.
+- **`Code` inline mark** (`Mod-e`) with Markdown backtick round-trip
+  (shipped in v0.3.1).
+- **Dioxus `ViewPlugin` parity** — interactive tables (drag-select,
+  highlight, resize) in Dioxus too; `basic-dioxus` runs the same
+  13-extension toolbar as `basic-leptos`.
+- Editing fixes: caret motion across block boundaries, ordered-list
+  numbering after lifting a middle item, block commands applying to every
+  selected block, empty-textblock focusability, and the
+  selection-mirror race that clipped multi-word drag-selections.
 
 ## What's new in v0.3 (2026-05-22)
 
@@ -124,7 +149,7 @@ Examples under [`examples/`](examples/):
 
 ```toml
 [dependencies]
-taino-edit = { version = "0.3", features = ["leptos"] }  # or "dioxus"
+taino-edit = { version = "0.5", features = ["leptos"] }  # or "dioxus"
 ```
 
 No adapter is enabled by default — pick `leptos` or `dioxus`. Add the

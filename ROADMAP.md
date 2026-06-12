@@ -11,8 +11,8 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.5.0` — `schema!` macro + inline (range-level) decorations + editing fixes |
-| **Last updated**             | 2026-05-27                                               |
+| **Current release**          | `v0.5.2` — editor-owned keyboard input in both adapters + coordinate-free table row/column primitives + list/caret editing fixes |
+| **Last updated**             | 2026-06-12                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|
@@ -275,13 +275,22 @@ pointer-interaction platform.
 
 ## Known issues
 
-- 🐛 Applying a mark/block type to a multi-word selection occasionally leaves
-  the trailing word(s) unformatted — an intermittent selection-boundary
-  mapping issue (reported during v0.5 manual testing). Next-up to investigate.
-- 🐛 The Dioxus adapter exposes fewer editing options than the Leptos one
-  (lists in particular are missing from `basic-dioxus`'s toolbar, and the
-  extension surface should be re-checked end-to-end for parity). Treat it
-  as a Dioxus-adapter parity audit, not a single command fix.
+- *(none currently open)*
+- [x] ~~Applying a mark/block type to a multi-word selection occasionally
+  leaves the trailing word(s) unformatted~~ — **fixed 2026-06-12**. Root
+  cause: a race between the `selectionchange` mirror and the reactive
+  effect's DOM-selection re-sync — the effect wrote the (by then stale)
+  mirrored range back into the browser mid drag-select, clipping the
+  selection's tail before the command ran. Mirror updates are now tagged
+  (`selection_from_dom`) and the effect skips the write-back for them, in
+  both adapters; deterministic regression browser tests added.
+- [x] ~~The Dioxus adapter exposes fewer editing options than the Leptos
+  one~~ — **fixed 2026-06-12**. Parity audit done: the adapter itself was
+  already at parity; the gap was `basic-dioxus`, which ran on 6 extensions.
+  The demo now uses the same 13-extension set and full toolbar as
+  `basic-leptos` (inline code, link/image, blockquote, code-block,
+  alignment, lists + lift, case transforms, select-all, − Row / − Col /
+  column width).
 
 ## Deferred (v0.4+)
 
