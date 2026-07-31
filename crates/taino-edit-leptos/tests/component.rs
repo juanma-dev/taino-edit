@@ -119,6 +119,48 @@ async fn component_mounts_initial_document() {
     );
 }
 
+/// SSR/first-paint behavior: the component's *own* markup (the `inner_html`
+/// snapshot — what a server would send) already shows the document before
+/// the mount effect has run, is not yet editable, and mounting replaces it
+/// rather than appending a second copy.
+#[wasm_bindgen_test]
+async fn first_paint_shows_doc_and_mount_does_not_duplicate_it() {
+    let host = host();
+    let s = schema();
+    let initial = EditorState::new(doc(&s, vec![para(&s, "First paint")]), s);
+
+    leptos::mount::mount_to(host.clone(), move || {
+        let state = RwSignal::new(initial.clone());
+        view! { <TainoEditor state=state /> }
+    })
+    .forget();
+
+    // Before yielding to the event loop: the pre-rendered document is in
+    // the DOM, but the editor (a deferred effect) has not booted yet.
+    let inner = host.inner_html();
+    assert!(
+        inner.contains("<p>First paint</p>"),
+        "first paint must show the document without the editor: {inner}"
+    );
+    assert!(
+        !inner.contains("contenteditable"),
+        "pre-mount markup must not be editable (pre-boot edits would be lost): {inner}"
+    );
+
+    settle().await;
+
+    let inner = host.inner_html();
+    assert!(
+        inner.contains("contenteditable=\"true\""),
+        "mount must make the editor live: {inner}"
+    );
+    assert_eq!(
+        inner.matches("First paint").count(),
+        1,
+        "mount must replace the pre-rendered markup, not append to it: {inner}"
+    );
+}
+
 #[wasm_bindgen_test]
 async fn signal_update_patches_the_dom() {
     let host = host();

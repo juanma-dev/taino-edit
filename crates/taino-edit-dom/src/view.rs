@@ -676,27 +676,10 @@ fn render_text(node: &Node, document: &Document) -> ViewDesc {
     }
 }
 
-/// Marker attribute on the synthetic trailing `<br>` we add to empty
-/// textblocks so the caret can land in them (a bare `<p></p>` is zero-height
-/// and unfocusable in `contenteditable`). Lets us find/remove only *our* break
-/// and skip it when reading text back.
-const TRAILING_BREAK_ATTR: &str = "data-taino-trailing-break";
-
-/// A block node that holds *inline* content (paragraph, heading, code block,
-/// …) — the nodes that need a trailing break when empty. Block *containers*
-/// (doc, blockquote, list, list item, table cell) hold other blocks and must
-/// **not** be treated as textblocks: doing so would (a) add stray breaks and
-/// (b) make `reconcile_trailing_break` strip a nested block's break. We detect
-/// inline content from the content expression (`inline*`, `text*`, …).
-fn is_textblock(node: &Node) -> bool {
-    node.node_type().is_block()
-        && node
-            .node_type()
-            .spec()
-            .content
-            .as_deref()
-            .is_some_and(|c| c.contains("inline") || c.contains("text"))
-}
+// The trailing-break marker and the textblock predicate live in
+// `view_html`, shared with the host-safe serializer so the SSR markup and
+// the mounted DOM can never disagree about either.
+use crate::view_html::{is_textblock, TRAILING_BREAK_ATTR};
 
 /// Append a synthetic trailing `<br>` to `el`.
 fn append_trailing_break(document: &Document, el: &Element) {

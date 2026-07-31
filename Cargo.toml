@@ -6,6 +6,10 @@ members = [
     "examples/basic-leptos",
     "examples/headless-core",
 ]
+# ssr-leptos is deliberately its own workspace: it builds Leptos in
+# `ssr`/`hydrate` mode, which cannot share a feature graph with the `csr`
+# demos above (cargo unifies features per build; the modes are exclusive).
+exclude = ["examples/ssr-leptos"]
 
 [workspace.package]
 version = "0.5.3"

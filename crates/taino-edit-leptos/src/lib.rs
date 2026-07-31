@@ -10,6 +10,11 @@
 //! `selectionchange`) are wired automatically: each one runs the
 //! corresponding `EditorView` method and folds the resulting transform —
 //! or selection update — into the state signal.
+//!
+//! The crate is **render-mode neutral**: it enables none of Leptos's
+//! `csr`/`hydrate`/`ssr` features, so the application picks the mode (as
+//! with any Leptos component library). Under SSR the initial document is
+//! server-rendered as real HTML — see [`TainoEditor`]'s docs.
 
 #![warn(missing_docs, rust_2018_idioms)]
 
@@ -31,7 +36,7 @@ pub use taino_edit_core::{
 };
 /// Re-export the DOM-bridge surface that the Leptos adapter wraps.
 #[doc(no_inline)]
-pub use taino_edit_dom::{Decoration, EditorView, ViewAction, ViewDesc, ViewPlugin};
+pub use taino_edit_dom::{doc_view_html, Decoration, EditorView, ViewAction, ViewDesc, ViewPlugin};
 
 /// A Leptos component that renders an editor backed by a
 /// `RwSignal<EditorState>`. Whenever the signal changes, the mounted DOM is
@@ -48,6 +53,21 @@ pub use taino_edit_dom::{Decoration, EditorView, ViewAction, ViewDesc, ViewPlugi
 ///     view! { <TainoEditor state=state /> }
 /// }
 /// ```
+///
+/// # Server-side rendering
+///
+/// Under Leptos `ssr` the component server-renders the **initial document**
+/// as real HTML (via [`doc_view_html`], which emits exactly the markup the
+/// mounted editor would build), so the content is visible — and indexable —
+/// before any wasm loads. The server-rendered document is intentionally
+/// *not* `contenteditable`: it stays read-only until the client effect
+/// mounts the live [`EditorView`] over it on hydration, which swaps in a
+/// structurally identical DOM and wires up editing. Edits typed before
+/// hydration would otherwise be lost to that swap.
+///
+/// State changes made *between* server render and hydration follow the
+/// normal reactive path: the mount effect reads the then-current state, so
+/// the editor never resurrects the pre-rendered snapshot.
 #[component]
 pub fn TainoEditor(
     /// The reactive editor state. The component reads the doc/schema from
@@ -69,6 +89,14 @@ pub fn TainoEditor(
     keymap: Option<Keymap>,
 ) -> impl IntoView {
     let node_ref = NodeRef::<leptos::html::Div>::new();
+    // The initial document, serialized to the exact markup `EditorView`
+    // would render for it. Under SSR this is what the server sends (the
+    // document is visible before any wasm loads); under CSR/hydrate it is
+    // the first paint. Deliberately a one-shot untracked snapshot, *not* a
+    // reactive closure: once the client effect below mounts `EditorView`,
+    // the view owns this subtree, and a reactive `inner_html` would rewrite
+    // it from under the editor on every state change.
+    let initial_html = state.with_untracked(|s| doc_view_html(s.doc()));
     // `EditorView` + its event closures are `!Send + !Sync`. Keep them in
     // Leptos's local-storage slot so the (Send+Sync) effect closures can
     // reach them through a Copy handle without capturing the value itself.
@@ -153,7 +181,12 @@ pub fn TainoEditor(
         runtime.set_value(None);
     });
 
-    view! { <div node_ref=node_ref class="taino-editor"></div> }
+    // Note the server-rendered div is *not* `contenteditable`: edits made
+    // before the wasm bundle boots would be silently discarded by the mount
+    // below. The pre-rendered document is read-only until the editor takes
+    // over (which replaces this markup with the DOM it manages — same
+    // structure by the `doc_view_html` contract, so nothing visibly changes).
+    view! { <div node_ref=node_ref class="taino-editor" inner_html=initial_html></div> }
 }
 
 /// What a mounted `TainoEditor` owns. Dropping this both drops the view

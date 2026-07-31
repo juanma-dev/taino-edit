@@ -12,7 +12,8 @@ This document is the single source of truth for **what has been done, what is in
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
 | **Current release**          | `v0.5.3` — selection-mirror race fix (multi-word drag-select clipping) + `basic-dioxus` full toolbar parity |
-| **Last updated**             | 2026-06-12                                               |
+| **On `main`, unreleased**    | Leptos SSR of the initial document + render-mode-neutral adapter (v0.6.0 material) |
+| **Last updated**             | 2026-07-31                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|
@@ -56,7 +57,8 @@ This document is the single source of truth for **what has been done, what is in
 
 ### Up next
 
-- ⏳ **Release `v0.1.0`** — `cargo publish` in dependency order, tag `v0.1.0`, post the GitHub Release and the announcements
+- ⏳ **Release `v0.6.0`** — Leptos SSR of the initial document (code + tests + example landed; `cargo publish` in dependency order, tag, GitHub Release and announcements are the maintainer's hand-off)
+- 💤 Candidates for after v0.6: `loro` CRDT behind a `collab` feature; richer extensions (footnotes, mentions, math/KaTeX, embed); Dioxus 0.7 migration (deliberately parked — product decision, dependabot told to ignore the major)
 
 ---
 
@@ -299,7 +301,7 @@ pointer-interaction platform.
 - 💤 Richer extensions: footnotes, mentions, math/KaTeX, embed
 - [x] Wire `TableView` into the Dioxus adapter — done 2026-05-26; `ViewPlugins` prop + pointer wiring, `basic-dioxus` table toolbar, browser tests. Full event- and plugin-wiring parity with Leptos.
 - [x] Inline (range-level) decorations for third-party UI (search highlight, comments) — done 2026-05-26; `Decoration::Inline`, drawn as an overlay layer (no text-node splitting, so the diff/patch read-back is untouched), contributed via `ViewPlugin::decorations`. Browser-tested incl. a read-back-safety test.
-- 💤 Server-side rendering of the initial document (Leptos SSR)
+- [x] Server-side rendering of the initial document (Leptos SSR) — done 2026-07-31. Two halves: (1) `taino-edit-leptos` stopped force-enabling `leptos/csr` (feature unification made SSR apps *impossible* before) and is now render-mode neutral; (2) `<TainoEditor>` renders the initial doc as `inner_html` via the new host-safe `taino_edit_dom::doc_view_html`, whose "emits exactly the markup `EditorView::mount` builds" contract (trailing-break anchors in empty textblocks included) is pinned by a headless-Chromium parse-equality test. Server-rendered doc is read-only until hydration by design. Shipped with `examples/ssr-leptos` (own workspace: axum + `cargo leptos`, `hydrate` wasm) and a dedicated CI job gating both feature graphs.
 
 ## Out of scope for v0.1 (community contributions welcome)
 

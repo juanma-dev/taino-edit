@@ -1,0 +1,57 @@
+# NOTE: this example is its own workspace (see `[workspace]` below and the
+# `exclude` in the repo root). It must be: the root workspace's demos build
+# Leptos in `csr` mode, while this one needs `ssr`/`hydrate` — cargo unifies
+# features per build graph, and Leptos's render modes are mutually exclusive.
+[package]
+name = "ssr-leptos"
+description = "taino-edit + Leptos SSR demo: the initial document is server-rendered HTML, then hydrated into a live editor. Run with `cargo leptos watch`."
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos = { version = "0.8.3" }
+leptos_router = { version = "0.8" }
+serde_json = "1"
+taino-edit-extensions = { path = "../../crates/taino-edit-extensions" }
+taino-edit-leptos = { path = "../../crates/taino-edit-leptos" }
+
+axum = { version = "0.8", optional = true }
+leptos_axum = { version = "0.8", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"], optional = true }
+
+console_error_panic_hook = { version = "0.1", optional = true }
+wasm-bindgen = { version = "0.2.121", optional = true }
+
+[features]
+default = []
+hydrate = [
+    "leptos/hydrate",
+    "dep:console_error_panic_hook",
+    "dep:wasm-bindgen",
+]
+ssr = [
+    "leptos/ssr",
+    "leptos_router/ssr",
+    "dep:axum",
+    "dep:leptos_axum",
+    "dep:tokio",
+]
+
+[package.metadata.leptos]
+output-name = "ssr-leptos"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
