@@ -13,9 +13,16 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: v0.5.3 released
+## Status: v0.6.0 released
 
-Seven crates on crates.io. The v0.5 line adds a **`schema!` macro**,
+Seven crates on crates.io. **v0.6 brings Leptos SSR**: `<TainoEditor>`
+server-renders the initial document as real HTML (visible and indexable
+before any wasm loads) and hydrates it into the live editor with no visual
+change — backed by a browser-pinned markup contract (`doc_view_html` ↔
+`EditorView::mount`). The adapter is now **render-mode neutral** (no forced
+`csr`; your app picks `csr`/`hydrate`/`ssr`), and the new
+[`ssr-leptos`](examples/ssr-leptos) example ships the full axum +
+`cargo leptos` setup. Before that, the v0.5 line added a **`schema!` macro**,
 **inline (range-level) decorations** drawn as a scroll-aware overlay,
 **editor-owned keyboard input** in both adapters (synchronous,
 live-selection — no stale-caret bugs), and a string of editing fixes
@@ -153,7 +160,7 @@ Examples under [`examples/`](examples/):
 
 ```toml
 [dependencies]
-taino-edit = { version = "0.5", features = ["leptos"] }  # or "dioxus"
+taino-edit = { version = "0.6", features = ["leptos"] }  # or "dioxus"
 ```
 
 No adapter is enabled by default — pick `leptos` or `dioxus`. Add the

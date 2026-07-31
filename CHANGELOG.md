@@ -8,6 +8,8 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-31
+
 ### Added
 
 - **Leptos SSR of the initial document.** Under `leptos/ssr`,

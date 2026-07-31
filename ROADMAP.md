@@ -11,8 +11,7 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.5.3` — selection-mirror race fix (multi-word drag-select clipping) + `basic-dioxus` full toolbar parity |
-| **On `main`, unreleased**    | Leptos SSR of the initial document + render-mode-neutral adapter (v0.6.0 material) |
+| **Current release**          | `v0.6.0` — Leptos SSR of the initial document + render-mode-neutral adapter |
 | **Last updated**             | 2026-07-31                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
@@ -57,8 +56,8 @@ This document is the single source of truth for **what has been done, what is in
 
 ### Up next
 
-- ⏳ **Release `v0.6.0`** — Leptos SSR of the initial document (code + tests + example landed; `cargo publish` in dependency order, tag, GitHub Release and announcements are the maintainer's hand-off)
-- 💤 Candidates for after v0.6: `loro` CRDT behind a `collab` feature; richer extensions (footnotes, mentions, math/KaTeX, embed); Dioxus 0.7 migration (deliberately parked — product decision, dependabot told to ignore the major)
+- 🚧 **Dioxus 0.7 migration** (v0.7.0 material) — unparked 2026-07-31: 0.7 is 9 months stable (0.7.10 current) and every new Dioxus project starts there; an adapter pinned to 0.6 is invisible to them. Sizing spike first; migration surface ≈ adapter (571 LOC) + browser tests (345) + demo (406).
+- 💤 Candidates after that: `loro` CRDT behind a `collab` feature; richer extensions (footnotes, mentions, math/KaTeX, embed)
 
 ---
 
