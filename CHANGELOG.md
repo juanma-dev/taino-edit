@@ -8,6 +8,17 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Dioxus adapter now targets Dioxus 0.7** (`dioxus = "0.7"`;
+  `dioxus-web = "0.7"` in the browser tests; `basic-dioxus` demo bumped
+  alongside). No source changes were needed: the adapter's thin-bridge
+  surface — the stable signals/hooks/rsx subset plus direct `web-sys` event
+  wiring — is identical across 0.6→0.7, and the full adapter browser suite
+  passes unchanged against 0.7.10. Breaking for apps still on Dioxus 0.6:
+  pin `taino-edit-dioxus = "0.6"` (and `taino-edit = "0.6"`) until you
+  migrate your app.
+
 ## [0.6.0] - 2026-07-31
 
 ### Added

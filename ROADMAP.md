@@ -56,7 +56,7 @@ This document is the single source of truth for **what has been done, what is in
 
 ### Up next
 
-- 🚧 **Dioxus 0.7 migration** (v0.7.0 material) — unparked 2026-07-31: 0.7 is 9 months stable (0.7.10 current) and every new Dioxus project starts there; an adapter pinned to 0.6 is invisible to them. Sizing spike first; migration surface ≈ adapter (571 LOC) + browser tests (345) + demo (406).
+- ⏳ **Release `v0.7.0`** — Dioxus 0.7 support (migration landed 2026-07-31; the sizing spike revealed a zero-source-change bump: the adapter's thin-bridge surface is identical across 0.6→0.7 and the browser suite passes unchanged against 0.7.10)
 - 💤 Candidates after that: `loro` CRDT behind a `collab` feature; richer extensions (footnotes, mentions, math/KaTeX, embed)
 
 ---
