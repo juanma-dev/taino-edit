@@ -41,3 +41,39 @@ jobs:
         run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+
+  # The SSR demo is its own workspace (Leptos `ssr`/`hydrate` cannot share a
+  # feature graph with the root workspace's `csr` demos), so it gets its own
+  # gates: both mode graphs must compile warning-free, and the server-render
+  # test must prove the initial document is in the HTML.
+  ssr-example:
+    name: ssr-leptos example (ssr + hydrate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/ssr-leptos
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust (stable + rustfmt + clippy + wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/ssr-leptos
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (ssr)
+        run: cargo clippy --all-targets --features ssr -- -D warnings
+
+      - name: Clippy (hydrate, wasm32)
+        run: cargo clippy --lib --target wasm32-unknown-unknown --features hydrate -- -D warnings
+
+      - name: Test (ssr server-render)
+        run: cargo test --features ssr

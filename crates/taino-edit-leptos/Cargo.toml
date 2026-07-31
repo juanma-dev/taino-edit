@@ -12,7 +12,10 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-leptos = { version = "0.8.3", features = ["csr"] }
+# Render-mode neutral on purpose: the *app* (not this library) must enable
+# exactly one of leptos's `csr` / `ssr` / `hydrate` features. Forcing `csr`
+# here would leak into downstream feature unification and break SSR apps.
+leptos = { version = "0.8.3" }
 taino-edit-core = { workspace = true }
 taino-edit-dom = { workspace = true }
 wasm-bindgen = "0.2.121"
@@ -40,3 +43,9 @@ features = [
 gloo-timers = { version = "0.4.0", features = ["futures"] }
 serde_json = "1.0.149"
 wasm-bindgen-test = "0.3.71"
+
+# The browser test-suite mounts the component through Leptos's CSR runtime;
+# scoping the feature to wasm32 dev-builds keeps the library itself
+# render-mode neutral for downstream apps (including SSR ones).
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+leptos = { version = "0.8.3", features = ["csr"] }

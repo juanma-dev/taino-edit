@@ -8,6 +8,40 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Leptos SSR of the initial document.** Under `leptos/ssr`,
+  `<TainoEditor>` now server-renders the initial document as real HTML —
+  content is visible (and indexable) before any wasm loads, and hydration
+  swaps the live editor in with no visual change. The pre-hydration document
+  is deliberately not `contenteditable` (edits typed before the editor boots
+  would be lost to the mount); it becomes editable the moment the client
+  effect mounts the `EditorView`.
+- **`taino_edit_dom::doc_view_html`** (re-exported by the Leptos adapter): a
+  host-safe, `web-sys`-free serializer that emits *exactly* the markup
+  `EditorView::mount` builds — including the trailing `<br>` caret anchor in
+  empty textblocks and the `<span>` wrapper for `to_dom`-less nodes. The
+  "serializer output parses to the mounted DOM" contract is pinned by a
+  headless-Chromium test plus host tests for each divergence from
+  `Node::to_html`, so SSR markup and the live editor can never drift apart.
+- **`examples/ssr-leptos`**: a full axum + `cargo leptos` SSR/hydration
+  demo, in its own cargo workspace (Leptos's `csr` and `ssr`/`hydrate` modes
+  cannot share a feature graph), with a host-side test asserting the server
+  response embeds the serialized initial document byte-for-byte. CI gained a
+  dedicated job that gates both of its feature graphs (`ssr` on the host,
+  `hydrate` on wasm32).
+
+### Changed
+
+- **`taino-edit-leptos` no longer force-enables Leptos's `csr` feature.**
+  The adapter is render-mode neutral, as a Leptos component library must be
+  (cargo unifies features across the dependency graph, so the old hard
+  `csr` made downstream SSR apps impossible). Apps now enable exactly one
+  of `leptos/csr`, `leptos/hydrate`, or `leptos/ssr` themselves — anything
+  built on a standard Leptos app template already does. First-paint also
+  improved in CSR: the component's initial view now contains the serialized
+  document instead of an empty `<div>`.
+
 ## [0.5.3] - 2026-06-12
 
 ### Fixed

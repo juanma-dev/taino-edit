@@ -16,7 +16,9 @@ pub mod decoration;
 pub mod desc;
 pub mod position_map;
 pub mod view;
+pub mod view_html;
 
 pub use decoration::Decoration;
 pub use desc::ViewDesc;
 pub use view::{EditorView, ViewAction, ViewPlugin};
+pub use view_html::doc_view_html;

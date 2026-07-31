@@ -13,7 +13,7 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: v0.5.2 released
+## Status: v0.5.3 released
 
 Seven crates on crates.io. The v0.5 line adds a **`schema!` macro**,
 **inline (range-level) decorations** drawn as a scroll-aware overlay,
@@ -142,6 +142,10 @@ Examples under [`examples/`](examples/):
   with the full toolbar, tables (drag-select / merge / resize) and live
   JSON + HTML panels.
 - [`basic-dioxus`](examples/basic-dioxus) — the same editor in Dioxus.
+- [`ssr-leptos`](examples/ssr-leptos) — Leptos **SSR + hydration**: the
+  initial document is server-rendered HTML (curl it!), then hydrated into a
+  live editor. Run with `cargo leptos watch`. (Its own workspace — Leptos's
+  `csr` and `ssr`/`hydrate` modes can't share one feature graph.)
 - [`headless-core`](examples/headless-core) — server-side / CLI demo
   proving `taino-edit-core` runs identically without a DOM.
 
@@ -154,6 +158,11 @@ taino-edit = { version = "0.5", features = ["leptos"] }  # or "dioxus"
 
 No adapter is enabled by default — pick `leptos` or `dioxus`. Add the
 `table-view` feature for table pointer interaction.
+
+The Leptos adapter is **render-mode neutral**: it does not enable any of
+Leptos's `csr`/`hydrate`/`ssr` features (a library never should — the modes
+are mutually exclusive and cargo unifies features). Your app enables exactly
+one, as it already does for every other Leptos component library.
 
 ## Use it (Leptos)
 
@@ -183,6 +192,20 @@ fn App() -> impl IntoView {
     view! { <TainoEditor state=state /> }
 }
 ```
+
+### Server-side rendering
+
+The same component SSRs the **initial document** as real HTML — no
+JavaScript required for first paint, and the content is indexable. Under
+`ssr`, `<TainoEditor>` serializes the initial doc with
+[`doc_view_html`](crates/taino-edit-dom/src/view_html.rs), which emits — by
+tested contract — exactly the markup the mounted editor builds, so
+hydration swaps the live editor in with no visual change. The pre-hydration
+document is deliberately *not* editable (edits typed before the wasm boots
+would be lost); it becomes editable the moment the editor mounts.
+
+See [`examples/ssr-leptos`](examples/ssr-leptos) for a full axum +
+`cargo leptos` setup.
 
 ## Build & test
 
