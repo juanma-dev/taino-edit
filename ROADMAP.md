@@ -56,7 +56,7 @@ This document is the single source of truth for **what has been done, what is in
 
 ### Up next
 
-- 🚧 **`collab` design doc** — design-before-code for the biggest remaining item, the `loro`-backed CRDT integration: model ↔ Peritext mapping, `map_against` on `Step`, a transport-agnostic sync API, and the convergence-testing strategy. Implementation only starts once the doc's open questions are resolved.
+- 🚧 **`collab` design** — [COLLAB_DESIGN.md](COLLAB_DESIGN.md) drafts the `loro`-backed CRDT integration end to end: dual-model op bridge (decision §3), model ↔ Peritext/tree mapping with a per-`Step` translation table (§4), a transport-agnostic `CollabSession` API as a new `taino-edit-collab` crate (§6), and a deterministic host-side convergence-testing strategy (§7). **Implementation starts only after its §8 open questions are resolved** (~4k LOC / 4–5 weeks estimated in §9 — the doc exists to de-risk that spend, whether by maintainer or contributor).
 - 💤 Richer extensions (footnotes, mentions, math/KaTeX, embed) — sized as **community contribution surface**; tracked as labeled GitHub issues
 
 ---
