@@ -1903,7 +1903,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-core"
-version = "0.5.3"
+version = "0.7.0"
 dependencies = [
  "pulldown-cmark",
  "regex",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-dom"
-version = "0.5.3"
+version = "0.7.0"
 dependencies = [
  "js-sys",
  "taino-edit-core",
@@ -1923,14 +1923,14 @@ dependencies = [
 
 [[package]]
 name = "taino-edit-extensions"
-version = "0.5.3"
+version = "0.7.0"
 dependencies = [
  "taino-edit-core",
 ]
 
 [[package]]
 name = "taino-edit-leptos"
-version = "0.5.3"
+version = "0.7.0"
 dependencies = [
  "leptos",
  "taino-edit-core",

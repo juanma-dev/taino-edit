@@ -11,8 +11,8 @@ This document is the single source of truth for **what has been done, what is in
 
 |                              |                                                          |
 | ---------------------------- | -------------------------------------------------------- |
-| **Current release**          | `v0.6.0` — Leptos SSR of the initial document + render-mode-neutral adapter |
-| **Last updated**             | 2026-07-31                                               |
+| **Current release**          | `v0.7.0` — Dioxus 0.7 support (zero-source-change adapter bump) |
+| **Last updated**             | 2026-09-05                                               |
 | **First milestone**          | `v0.1.0` — publishable MVP (done)                        |
 | **Second milestone**         | `v0.2.0` — closing v0.1 gaps + platform broadening (done)|
 | **Third milestone**          | `v0.3.0` — full tables + pointer-interaction platform (done)|
@@ -56,8 +56,8 @@ This document is the single source of truth for **what has been done, what is in
 
 ### Up next
 
-- ⏳ **Release `v0.7.0`** — Dioxus 0.7 support (migration landed 2026-07-31; the sizing spike revealed a zero-source-change bump: the adapter's thin-bridge surface is identical across 0.6→0.7 and the browser suite passes unchanged against 0.7.10)
-- 💤 Candidates after that: `loro` CRDT behind a `collab` feature; richer extensions (footnotes, mentions, math/KaTeX, embed)
+- 🚧 **`collab` design doc** — design-before-code for the biggest remaining item, the `loro`-backed CRDT integration: model ↔ Peritext mapping, `map_against` on `Step`, a transport-agnostic sync API, and the convergence-testing strategy. Implementation only starts once the doc's open questions are resolved.
+- 💤 Richer extensions (footnotes, mentions, math/KaTeX, embed) — sized as **community contribution surface**; tracked as labeled GitHub issues
 
 ---
 

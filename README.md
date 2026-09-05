@@ -13,9 +13,13 @@ JS dependency at runtime**.
 
 It is part of the `taino-*` family, following `taino-dnd-*`.
 
-## Status: v0.6.0 released
+## Status: v0.7.0 released
 
-Seven crates on crates.io. **v0.6 brings Leptos SSR**: `<TainoEditor>`
+Seven crates on crates.io. **v0.7 targets Dioxus 0.7** — a zero-source-change
+bump (the adapter's thin bridge — stable signals/hooks/rsx subset plus direct
+`web-sys` event wiring — is identical across 0.6→0.7; the browser suite
+passed unchanged). Apps still on Dioxus 0.6 should pin `taino-edit = "0.6"`.
+**v0.6 brought Leptos SSR**: `<TainoEditor>`
 server-renders the initial document as real HTML (visible and indexable
 before any wasm loads) and hydrates it into the live editor with no visual
 change — backed by a browser-pinned markup contract (`doc_view_html` ↔
@@ -160,7 +164,7 @@ Examples under [`examples/`](examples/):
 
 ```toml
 [dependencies]
-taino-edit = { version = "0.6", features = ["leptos"] }  # or "dioxus"
+taino-edit = { version = "0.7", features = ["leptos"] }  # or "dioxus"
 ```
 
 No adapter is enabled by default — pick `leptos` or `dioxus`. Add the

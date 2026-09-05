@@ -8,6 +8,8 @@ Pre-1.0, minor version bumps may include breaking API changes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-05
+
 ### Changed
 
 - **The Dioxus adapter now targets Dioxus 0.7** (`dioxus = "0.7"`;
