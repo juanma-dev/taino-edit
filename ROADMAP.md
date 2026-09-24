@@ -277,6 +277,17 @@ pointer-interaction platform.
 ## Known issues
 
 - *(none currently open)*
+- [x] ~~`read_dom_changes`/`try_patch` don't detect or clean up text typed
+  next to a non-text inline atom (e.g. a checkbox) in an otherwise-empty
+  block~~ — **fixed 2026-09-21**. Root cause: `find_empty_block_text`
+  only handled a block with *zero* tracked children, and `try_patch`'s
+  matching DOM-cleanup step only ran under that same condition — a
+  block whose sole tracked child is a non-text atom fell through both,
+  so text typed next to the atom stayed a pure DOM/visual illusion,
+  invisible to the model until an unrelated re-render exposed it as an
+  orphaned, duplicating DOM node. Both widened from "no tracked
+  children" to "no tracked *text* children" (empty OR atom-only); new
+  regression test `taino-edit-dom/tests/atom_text_sync.rs`.
 - [x] ~~Applying a mark/block type to a multi-word selection occasionally
   leaves the trailing word(s) unformatted~~ — **fixed 2026-06-12**. Root
   cause: a race between the `selectionchange` mirror and the reactive

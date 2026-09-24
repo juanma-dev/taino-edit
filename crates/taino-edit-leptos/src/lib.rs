@@ -225,6 +225,47 @@ impl Drop for EventCloser {
     }
 }
 
+/// Whether `state`'s current selection is entirely "inside" an atom node
+/// (`NodeType::is_atom`) in either of the two shapes that can mean that: a
+/// real `Selection::Node` on an atom, or a non-empty `Selection::Text`
+/// range that exactly brackets one whole atom (the shape a `Node`
+/// selection decays into after a live DOM round-trip — see `wire_events`'s
+/// own keydown handler), or an EMPTY caret whose immediate parent is an
+/// atom (a bare caret that ended up one level inside an atom's own
+/// content, which should never be freely typable either). Fork-local
+/// addition: no adapter here previously used `NodeType::is_atom` at all,
+/// so nothing stopped ordinary typed-character keys (not just structural
+/// ones) from reaching native contenteditable handling while an atom was
+/// selected/trapped — letting Chrome's own "replace selected/typed-into
+/// content" behavior run over it, which for a node with a real DOM
+/// subtree (not a leaf) can produce genuinely corrupt markup neither this
+/// library nor any consumer's `read_dom_changes` has tracked meaning for.
+/// Used by `wire_events`'s keydown handler to treat ANY key the same way
+/// it already treats `"Enter"`/`"Backspace"`/`"Delete"`: always call
+/// `prevent_default()`, regardless of whether a bound keymap command
+/// happened to claim this particular key.
+fn selection_touches_an_atom(state: &EditorState) -> bool {
+    let doc = state.doc();
+    match state.selection() {
+        Selection::Node { pos } => doc
+            .node_at(pos)
+            .map(|n| n.node_type().is_atom())
+            .unwrap_or(false),
+        Selection::Text { anchor, head } if anchor != head => {
+            let (from, to) = (anchor.min(head), anchor.max(head));
+            doc.node_at(from)
+                .map(|n| n.node_type().is_atom() && from + n.node_size() == to)
+                .unwrap_or(false)
+        }
+        Selection::Text { anchor, .. } => ResolvedPos::resolve(doc, anchor)
+            .ok()
+            .is_some_and(|rp| rp.depth() > 0 && rp.parent().node_type().is_atom()),
+        // A table-cell range selection or a whole-document select-all is
+        // never "one whole atom" by definition — neither case applies here.
+        Selection::Cell { .. } | Selection::All => false,
+    }
+}
+
 /// Attach the standard event listeners on `el`.
 fn wire_events(
     el: &web_sys::Element,
@@ -332,8 +373,15 @@ fn wire_events(
                 state.set(n);
             }
             // Structural keys are model-authoritative: never let native
-            // contenteditable handling mutate the document.
-            let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete");
+            // contenteditable handling mutate the document. An atom that's
+            // currently selected/trapped (`selection_touches_an_atom`) is
+            // ALSO always structural, regardless of which key was pressed
+            // — an atom is meant to be a genuinely opaque unit, so no typed
+            // character should ever reach native contenteditable handling
+            // while one is selected, the same way Backspace/Delete already
+            // never do.
+            let structural = matches!(key.key.as_str(), "Enter" | "Backspace" | "Delete")
+                || selection_touches_an_atom(&cur);
             if handled || structural {
                 kev.prevent_default();
             }
@@ -395,7 +443,7 @@ fn wire_events(
         for kind in ["mousedown", "mousemove", "mouseup"] {
             let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |ev: web_sys::Event| {
                 if let Some(Some(action)) = with_view(runtime, |v| v.handle_view_event(&ev)) {
-                    apply_view_action(state, action);
+                    apply_view_action(state, runtime, action);
                 }
             });
             register(kind, cb);
@@ -470,27 +518,55 @@ fn apply_transform(state: RwSignal<EditorState>, tr: &Transform) {
     });
 }
 
-/// Apply a [`ViewAction`] produced by a view plugin to the state signal.
-fn apply_view_action(state: RwSignal<EditorState>, action: ViewAction) {
-    match action {
+/// Apply a [`ViewAction`] produced by a view plugin to the state signal
+/// AND, synchronously, to the live view/DOM — not just the reactive
+/// signal. A real, confirmed-live race, fixed here rather than left to
+/// the reactive `Effect` in `TainoEditor`'s own body (which ALSO
+/// eventually pushes `state`'s selection into the DOM, but only as an
+/// async microtask): a pointer-driven correction (e.g. a `ViewPlugin`
+/// fixing up a `mouseup` that landed the browser's own native caret
+/// somewhere wrong) could be outrun by the very next synchronous
+/// keystroke, which would then act against the DOM's still-STALE caret
+/// position for one more character before the async effect caught up —
+/// reproduced directly: typing immediately after such a correction
+/// landed each subsequent character progressively one position further
+/// behind, visibly scrambling the typed word. Mirrors EXACTLY what the
+/// `keydown` handler already does for its own `next: Option<EditorState>`
+/// (see `wire_events`) — this closes the same gap for pointer-driven
+/// corrections too.
+fn apply_view_action(
+    state: RwSignal<EditorState>,
+    runtime: StoredValue<Option<EditorRuntime>, LocalStorage>,
+    action: ViewAction,
+) {
+    let snapshot = state.get_untracked();
+    let next = match action {
         ViewAction::Select(sel) => {
-            state.update(|s| {
-                let mut tx = s.tr();
-                tx.set_selection(sel);
-                tx.no_history();
-                *s = s.apply(tx);
-            });
+            let mut tx = snapshot.tr();
+            tx.set_selection(sel);
+            tx.no_history();
+            snapshot.apply(tx)
         }
         ViewAction::Command(cmd) => {
-            let snapshot = state.get_untracked();
             let mut next = None;
             {
                 let mut d = |tx: Transaction| next = Some(snapshot.apply(tx));
                 cmd(&snapshot, Some(&mut d));
             }
-            if let Some(n) = next {
-                state.set(n);
-            }
+            let Some(n) = next else {
+                return;
+            };
+            n
         }
-    }
+    };
+    runtime.update_value(|rt| {
+        if let Some(r) = rt.as_mut() {
+            r.view.update(next.doc().clone());
+            r.applying_selection.set(true);
+            let _ = r.view.set_selection(next.selection());
+            r.applying_selection.set(false);
+            r.view.refresh_view_decorations(Some(next.selection()));
+        }
+    });
+    state.set(next);
 }

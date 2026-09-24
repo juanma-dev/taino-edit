@@ -465,6 +465,15 @@ impl EditorView {
         if self.composing.get() {
             return None;
         }
+        // The browser's own current caret (a plain collapsed one only),
+        // read ONCE up front — used below to disambiguate `find_diff`'s
+        // otherwise-ambiguous prefix/suffix matching. See `find_diff_
+        // anchored`'s own doc comment for the confirmed-live bug this
+        // fixes.
+        let caret = match self.read_selection() {
+            Some(Selection::Text { anchor, head }) if anchor == head => Some(anchor),
+            _ => None,
+        };
         let mut found = None;
         collect_text_changes(&self.children, 0, &mut |desc, doc_pos| {
             if found.is_some() {
@@ -474,7 +483,12 @@ impl EditorView {
                 let dom_data = text.data();
                 let doc_text = node.text().unwrap_or("");
                 if dom_data != doc_text {
-                    if let Some((offset, old_len, new_part)) = find_diff(doc_text, &dom_data) {
+                    let local_caret = caret
+                        .filter(|&c| c >= doc_pos && c <= doc_pos + dom_data.chars().count())
+                        .map(|c| c - doc_pos);
+                    if let Some((offset, old_len, new_part)) =
+                        find_diff_anchored(doc_text, &dom_data, local_caret)
+                    {
                         found = Some((doc_pos + offset, old_len, new_part, node.clone()));
                     }
                 }
@@ -737,10 +751,55 @@ fn direct_text(el: &Element) -> String {
     s
 }
 
-/// Find the first empty textblock whose DOM has gained text (the browser
-/// inserting a character into a previously-empty block), returning the
-/// document position just inside it and the typed text. Walks in document
-/// order, mirroring [`collect_text_changes`]' position model.
+/// Remove `dom`'s direct **text-node** children and our own
+/// trailing-break marker (see [`TRAILING_BREAK_ATTR`]), leaving element
+/// children — e.g. an inline atom's `<input>` — in place. Called from
+/// [`try_patch`] before rebuilding a block whose previous tracked children
+/// had no [`ViewDesc::Text`] to diff against, so foreign content the
+/// browser inserted (whether the block was fully empty or its only tracked
+/// children were non-text atoms) doesn't linger as an orphaned DOM node
+/// once the model gains a real tracked text child for it.
+fn strip_untracked_text(dom: &Element) {
+    let kids = dom.child_nodes();
+    let mut stale = Vec::new();
+    for i in 0..kids.length() {
+        if let Some(n) = kids.item(i) {
+            let is_text = n.node_type() == web_sys::Node::TEXT_NODE;
+            let is_our_break = n
+                .dyn_ref::<Element>()
+                .is_some_and(|e| e.has_attribute(TRAILING_BREAK_ATTR));
+            if is_text || is_our_break {
+                stale.push(n);
+            }
+        }
+    }
+    for n in stale {
+        let _ = dom.remove_child(&n);
+    }
+}
+
+/// Find the first textblock whose DOM has gained *untracked* text and
+/// return the document position just after its tracked children and the
+/// typed text. Walks in document order, mirroring [`collect_text_changes`]'
+/// position model.
+///
+/// Covers two cases that both look the same from here — a block with no
+/// text descriptor to diff against:
+///  - The block was previously empty (e.g. typing into the paragraph
+///    created by pressing Enter).
+///  - The block's only tracked children are non-text atoms (e.g. a
+///    checkbox), and the browser inserted a brand-new text node alongside
+///    them (typing right after an inline atom that has no text sibling
+///    yet). `collect_text_changes` never visits this text because no
+///    tracked [`ViewDesc::Text`] exists for it to diff against, so without
+///    this branch the keystroke lands in the DOM but never reaches the
+///    model.
+///
+/// Either way the insertion point is just past whatever tracked (atom)
+/// children already precede it — computed from their `node_size`s, the
+/// same units [`collect_text_changes`] advances `pos` by — since the
+/// browser always appends newly-typed text after the caret's existing
+/// siblings, not before.
 fn find_empty_block_text(descs: &[ViewDesc], base: usize) -> Option<(usize, String)> {
     let mut pos = base;
     for d in descs {
@@ -752,15 +811,19 @@ fn find_empty_block_text(descs: &[ViewDesc], base: usize) -> Option<(usize, Stri
                 children,
             } => {
                 let content_start = pos + 1;
-                if children.is_empty() {
-                    if is_textblock(node) {
-                        let txt = direct_text(dom);
-                        if !txt.is_empty() {
-                            return Some((content_start, txt));
-                        }
+                let has_tracked_text = children.iter().any(|c| matches!(c, ViewDesc::Text { .. }));
+                if !has_tracked_text && is_textblock(node) {
+                    let txt = direct_text(dom);
+                    if !txt.is_empty() {
+                        let insert_pos = content_start
+                            + children.iter().map(|c| c.node().node_size()).sum::<usize>();
+                        return Some((insert_pos, txt));
                     }
-                } else if let Some(found) = find_empty_block_text(children, content_start) {
-                    return Some(found);
+                }
+                if !children.is_empty() {
+                    if let Some(found) = find_empty_block_text(children, content_start) {
+                        return Some(found);
+                    }
                 }
                 pos += node.node_size();
             }
@@ -957,17 +1020,19 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             if new.is_text() || node.node_type() != new.node_type() || node.attrs() != new.attrs() {
                 return None;
             }
-            // If the old view had no children, the DOM may carry foreign nodes:
-            // our trailing <br>, or text the browser typed into a previously
-            // empty block that the read-back just folded into the model. Clear
-            // them so `patch_children` rebuilds from the model without
-            // duplicating content.
-            if children.is_empty() {
-                while let Some(c) = dom.first_child() {
-                    if dom.remove_child(&c).is_err() {
-                        break; // never spin if a child can't be removed
-                    }
-                }
+            // If the old view had no *tracked text* child, the DOM may
+            // carry foreign nodes: our trailing <br>, or text the browser
+            // typed (into a previously empty block, or next to a non-text
+            // atom like a checkbox) that the read-back just folded into the
+            // model. Strip them so `patch_children` rebuilds the now-real
+            // text child from the model without duplicating content. This
+            // only strips text nodes and our own trailing-break marker —
+            // never an atom's element (e.g. the checkbox `<input>`), which
+            // stays exactly where `patch_children`'s reused-desc path
+            // expects to find it.
+            let had_tracked_text = children.iter().any(|c| matches!(c, ViewDesc::Text { .. }));
+            if !had_tracked_text {
+                strip_untracked_text(dom);
             }
             let new_kids: Vec<Node> = new.content().iter().cloned().collect();
             let new_children = patch_children(document, dom, children, &new_kids);
@@ -982,6 +1047,61 @@ fn try_patch(document: &Document, old: &ViewDesc, new: &Node) -> Option<ViewDesc
             })
         }
     }
+}
+
+/// Like [`find_diff`], but disambiguated by the browser's own CURRENT
+/// caret offset within `b` (`caret_in_b`, in chars), when one is known
+/// and usable. Plain prefix/suffix string diffing is provably ambiguous
+/// whenever the inserted text shares characters with its own immediate
+/// neighborhood: e.g. `a = "typlain paragraph"`, `b = "typplain
+/// paragraph"` (typing a `"p"` right after `"ty"`, next to `a`'s own
+/// EXISTING `"p"` two characters later) is equally valid as "insert p
+/// at 2" or "insert p at 3" — both produce the IDENTICAL resulting
+/// text, but only "insert p at 2" matches where the caret actually is.
+/// Confirmed live (not assumed): the unanchored `find_diff` always
+/// resolves this kind of ambiguity by greedily extending the common
+/// PREFIX as far as string equality allows, which happens to pick the
+/// later, wrong position here — silently leaving the model's own
+/// notion of the caret one position behind after every such keystroke,
+/// compounding into a visibly scrambled word after a few
+/// (`"typed"` re-rendering as `"tyedp"`).
+///
+/// The browser's own caret, for a plain (non-IME, non-autocomplete)
+/// typed insertion, always sits exactly at the END of what was just
+/// inserted — so when the text grew (`b` longer than `a`) and a caret
+/// position is known, the edit's END in `b` is pinned to that caret
+/// DIRECTLY, rather than guessed at via string matching; the edit's
+/// START then follows immediately from the already-known length delta.
+/// The guess is still verified against both strings before being
+/// trusted (never applied blindly): falls straight through to the
+/// unanchored `find_diff` whenever the text didn't grow, no caret is
+/// available, or the anchored guess doesn't actually reconcile the two
+/// strings (composition commits, paste, and spellcheck/autocomplete
+/// replacing a whole word while the caret sits elsewhere are exactly
+/// the shapes this guards against misfiring on).
+fn find_diff_anchored(
+    a: &str,
+    b: &str,
+    caret_in_b: Option<usize>,
+) -> Option<(usize, usize, String)> {
+    if let Some(caret) = caret_in_b {
+        let a_chars: Vec<char> = a.chars().collect();
+        let b_chars: Vec<char> = b.chars().collect();
+        let (a_len, b_len) = (a_chars.len(), b_chars.len());
+        if b_len > a_len && caret <= b_len {
+            let inserted = b_len - a_len;
+            if caret >= inserted {
+                let old_start = caret - inserted;
+                let prefix_ok = a_chars[..old_start] == b_chars[..old_start];
+                let suffix_ok = a_chars[old_start..] == b_chars[caret..];
+                if prefix_ok && suffix_ok {
+                    let new_part: String = b_chars[old_start..caret].iter().collect();
+                    return Some((old_start, 0, new_part));
+                }
+            }
+        }
+    }
+    find_diff(a, b)
 }
 
 fn find_diff(a: &str, b: &str) -> Option<(usize, usize, String)> {
