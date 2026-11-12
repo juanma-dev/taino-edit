@@ -102,6 +102,29 @@ pub struct EditorState {
     plugins: PluginStates,
 }
 
+
+/// Caret at the start of the first textblock's content. `Selection::caret(0)`
+/// sits *before* the first block's opening token, which is not a typable
+/// position: DOM selection sync maps it to a point outside the textblock and
+/// subsequent DOM-typing folds interleave backwards (characters reversed).
+fn initial_text_caret(doc: &Node) -> Selection {
+    let mut cur = 0usize;
+    for i in 0..doc.child_count() {
+        let child = doc.child(i);
+        let is_textblock = child
+            .node_type()
+            .spec()
+            .content
+            .as_deref()
+            .map_or(false, |c| c.starts_with("inline"));
+        if is_textblock {
+            return Selection::caret(cur + 1); // past the block's opening token
+        }
+        cur += child.node_size();
+    }
+    Selection::caret(0)
+}
+
 impl EditorState {
     /// A fresh state for `doc`, caret at the document start.
     pub fn new(doc: Node, schema: Schema) -> Self {
@@ -112,9 +135,10 @@ impl EditorState {
     /// [`Plugin::init`] is called with the (partially-initialised) state,
     /// so plugins can derive their initial value from the doc.
     pub fn with_plugins(doc: Node, schema: Schema, plugins: PluginSet) -> Self {
+        let selection = initial_text_caret(&doc);
         let seed = EditorState {
             doc,
-            selection: Selection::caret(0),
+            selection,
             schema,
             history: History::default(),
             plugins: PluginStates::default(),
